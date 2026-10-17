@@ -23,6 +23,17 @@ export async function upload(file: File) {
     })
   ).url;
 }
+export type UploadedFile = {
+  url: string;
+  name: string;
+  kind: "image" | "pdf" | "file";
+};
+/** Stores any file on the server; the kind says which tile can show it. */
+export async function uploadFile(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return request<UploadedFile>("/api/files", { method: "POST", body: form });
+}
 export function useDesktop() {
   const [desktop, setDesktop] = useState<Snapshot | null>(null);
   const [status, setStatus] = useState("Caricamento…");

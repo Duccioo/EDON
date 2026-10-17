@@ -5,6 +5,7 @@ import {
   desktopSchema,
   overlaps,
   presets,
+  readableInk,
   tileSchema,
   tileSizeAllowed,
   tileSizeLimits,
@@ -121,6 +122,27 @@ export const tileTypeDocs = [
     fields: ["title", "subtitle", "config.children"],
     sizes: "1×1 … 2×2",
   },
+  {
+    type: "weather",
+    description:
+      "Meteo attuale di una città (dati Open-Meteo, aggiornati ogni 10 minuti). config.location è il nome della città, es. “Firenze”.",
+    fields: ["title", "subtitle", "config.location"],
+    sizes: "1×1 … 2×2",
+  },
+  {
+    type: "progress",
+    description:
+      "Barra di avanzamento nel tempo: timer o scadenza. Si riempie da config.startsAt a config.endsAt (date ISO 8601). Per un timer imposta startsAt=adesso e endsAt=adesso+durata; per una scadenza startsAt=inizio del lavoro. title è l'etichetta.",
+    fields: ["title", "subtitle", "config.startsAt", "config.endsAt"],
+    sizes: "1×1 … 2×2",
+  },
+  {
+    type: "file",
+    description:
+      "File caricato dall'utente (PDF con anteprima, altri formati come download). Gli agenti non possono caricare file: config.file è un percorso /uploads/… già esistente.",
+    fields: ["title", "subtitle", "config.file"],
+    sizes: "1×1 … 3×3",
+  },
 ].map((t) => ({
   ...t,
   appearance: {
@@ -129,7 +151,7 @@ export const tileTypeDocs = [
       preset:
         "minimal | industrial | glass (applica i valori del preset, poi gli altri campi li sovrascrivono)",
       background: "#rrggbb",
-      color: "#rrggbb",
+      color: "#rrggbb (a video il testo è bianco o nero in base allo sfondo)",
       image: "URL HTTPS dell'immagine di sfondo, oppure vuoto",
       radius: "0–40",
       padding: "8–40",
@@ -164,6 +186,9 @@ function applyFields(
       ...(preset ? presets[preset] : {}),
       ...rest,
     };
+    // Text colour is derived from the background unless the caller sets both.
+    if (rest.background && !rest.color)
+      next.appearance.color = readableInk(next.appearance.background);
   }
   if (input.w !== undefined || input.h !== undefined) {
     if (tile.origin !== "agent")

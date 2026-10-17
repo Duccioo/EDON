@@ -18,6 +18,7 @@ import {
   upsertInput,
 } from "./tiles";
 import { registerMcp } from "./mcp";
+import { WeatherError, WeatherService } from "./weather";
 import { AgentClient, agentSettingsInput, type AgentEnv } from "./agent";
 
 const agentPath = (pathname: string) =>
@@ -42,6 +43,23 @@ function imageType(data: Buffer): "png" | "jpg" | "gif" | "webp" | undefined {
   )
     return "webp";
 }
+const pdfMagic = (data: Buffer) => data.toString("latin1", 0, 5) === "%PDF-";
+/** Any upload keeps a short lowercase extension; image and PDF names are decided by content, never by the client. */
+function fileExtension(name: string, data: Buffer) {
+  const sniffed = imageType(data) ?? (pdfMagic(data) ? "pdf" : undefined);
+  if (sniffed) return sniffed;
+  const ext = /\.([a-z0-9]{1,8})$/i.exec(name)?.[1].toLowerCase() ?? "bin";
+  return ["png", "jpg", "jpeg", "gif", "webp", "pdf"].includes(ext)
+    ? "bin"
+    : ext;
+}
+const mimeTypes: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
 export async function buildApp(options: {
   dataDir: string;
   webDir?: string;
@@ -56,6 +74,7 @@ export async function buildApp(options: {
   await mkdir(resolve(options.dataDir, "uploads"), { recursive: true });
   const store = new Store(resolve(options.dataDir, "desktop.sqlite"));
   const tiles = new TileService(store);
+  const weather = new WeatherService(options.fetch ?? fetch);
   const agent = new AgentClient(
     store,
     options.agent ?? {},
@@ -93,6 +112,14 @@ export async function buildApp(options: {
       "Content-Security-Policy",
       "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
     );
+    // Only our own pages may frame an uploaded PDF (the expanded file view).
+    if (/^\/uploads\/[\w-]+\.pdf(\?|$)/.test(req.url))
+      reply
+        .header("X-Frame-Options", "SAMEORIGIN")
+        .header(
+          "Content-Security-Policy",
+          "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'",
+        );
     if (req.url.startsWith("/api") || req.url.startsWith("/uploads"))
       reply.header("Cache-Control", "no-store");
     if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
@@ -117,7 +144,7 @@ export async function buildApp(options: {
       return reply.code(401).send({ error: "Accedi per continuare." });
   });
   app.setErrorHandler((error, req, reply) => {
-    if (error instanceof TileError)
+    if (error instanceof TileError || error instanceof WeatherError)
       return reply.code(error.status).send({ error: error.message });
     if (error instanceof ZodError)
       return reply
@@ -139,7 +166,7 @@ export async function buildApp(options: {
     return reply.code(status).send({
       error:
         status === 413
-          ? "Immagine troppo grande. Il limite è 10 MB."
+          ? "File troppo grande. Il limite è 10 MB."
           : status >= 500
             ? "Salvataggio non riuscito. Riprova."
             : error instanceof Error
@@ -290,20 +317,49 @@ export async function buildApp(options: {
     });
     return { url: `/uploads/${name}` };
   });
+  // Any file the user drops on the desktop: images and PDFs get a preview, the rest a download tile.
+  app.post("/api/files", async (req, reply) => {
+    const file = await req.file();
+    if (!file) return reply.code(400).send({ error: "Scegli un file." });
+    const data = await file.toBuffer();
+    if (!data.length)
+      return reply.code(400).send({ error: "Il file è vuoto." });
+    const extension = fileExtension(file.filename, data);
+    const name = `${randomUUID()}.${extension}`;
+    await writeFile(resolve(options.dataDir, "uploads", name), data, {
+      flag: "wx",
+    });
+    return {
+      url: `/uploads/${name}`,
+      name: file.filename.replace(/[\\/\u0000-\u001f]/g, "").slice(0, 120),
+      kind: imageType(data) ? "image" : extension === "pdf" ? "pdf" : "file",
+    };
+  });
   app.get<{ Params: { name: string } }>(
     "/uploads/:name",
     async (req, reply) => {
       const name = req.params.name;
-      if (!/^[a-f0-9-]{36}\.(png|jpg|gif|webp)$/.test(name))
-        return reply.code(404).send({ error: "Immagine non trovata." });
+      if (!/^[a-f0-9-]{36}\.[a-z0-9]{1,8}$/.test(name))
+        return reply.code(404).send({ error: "File non trovato." });
       try {
         const data = await readFile(resolve(options.dataDir, "uploads", name));
-        const ext = name.split(".").pop();
-        return reply.type(`image/${ext === "jpg" ? "jpeg" : ext}`).send(data);
+        const ext = name.split(".").pop()!;
+        const mime = mimeTypes[ext];
+        // Unknown content is never rendered by the browser, only downloaded.
+        if (!mime)
+          reply
+            .header("Content-Disposition", "attachment")
+            .header("Content-Security-Policy", "sandbox");
+        return reply.type(mime ?? "application/octet-stream").send(data);
       } catch {
-        return reply.code(404).send({ error: "Immagine non trovata." });
+        return reply.code(404).send({ error: "File non trovato." });
       }
     },
+  );
+  app.get("/api/weather", async (req) =>
+    weather.get(
+      z.object({ q: z.string().trim().min(1).max(100) }).parse(req.query).q,
+    ),
   );
   if (options.webDir) {
     await app.register(staticFiles, { root: options.webDir });

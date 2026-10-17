@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  readableInk,
   tileSchema,
   type FolderChild,
   type FolderChildType,
@@ -260,7 +261,7 @@ export function FolderView({
                   className="folder-card"
                   style={{
                     backgroundColor: child.appearance.background,
-                    color: child.appearance.color,
+                    color: readableInk(child.appearance.background),
                   }}
                 >
                   <div className="folder-card-body">

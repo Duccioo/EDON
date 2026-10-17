@@ -14,6 +14,8 @@ import {
   ArrowUpRight,
   ChevronRight,
   Clock3,
+  CloudSun,
+  FileUp,
   Folder,
   Image,
   LayoutGrid,
@@ -24,12 +26,15 @@ import {
   Pencil,
   Settings2,
   StickyNote,
+  Timer,
   Trash2,
   X,
 } from "lucide-react";
 import type { Desktop } from "../../../packages/shared/model";
 import {
   archiveTile,
+  defaultTileSize,
+  folderChildTypes,
   folderChildToTile,
   restoreTile,
   tileToFolderChild,
@@ -42,7 +47,9 @@ import {
   type Tile,
   type TileType,
 } from "../../../packages/shared/model";
-import { request, useDesktop } from "./api";
+import { request, uploadFile, useDesktop, type UploadedFile } from "./api";
+import { AnimatedWallpaper } from "./AnimatedWallpaper";
+import { useDesktopInk } from "./ink";
 import { fitBoard } from "../../../packages/shared/board";
 import { TileView, tileStyle } from "./TileView";
 import { FolderView } from "./FolderView";
@@ -157,6 +164,7 @@ function Login({
 }
 function DesktopApp({ onLogout }: { onLogout: () => void }) {
   const { desktop, update, status, error, retry, refresh } = useDesktop();
+  const ink = useDesktopInk(desktop?.settings);
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [dialog, setDialog] = useState<
@@ -178,8 +186,31 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   const [gridEpoch, setGridEpoch] = useState(0);
   const [deleting, setDeleting] = useState<Tile | null>(null);
   const [notice, setNotice] = useState("");
+  const onTimerFinish = useCallback(
+    (title: string) => setNotice(`“${title}” è finito.`),
+    [],
+  );
   const [dockHeight, setDockHeight] = useState(64);
   const viewport = useRef<HTMLElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dropping, setDropping] = useState(false);
+  const addFilesRef = useRef<(files: File[]) => void>(() => {});
+  // Holding a tile for half a second switches to edit mode and hands the pointer to the grid.
+  const press = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    x: number;
+    y: number;
+  } | null>(null);
+  const pendingGrab = useRef<{ el: HTMLElement; x: number; y: number } | null>(
+    null,
+  );
+  const suppressClick = useRef(false);
+  const [pressing, setPressing] = useState<string | null>(null);
+  const cancelPress = useCallback(() => {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+    setPressing(null);
+  }, []);
   const [space, setSpace] = useState({
     width: 1050,
     height: 650,
@@ -232,6 +263,70 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [toggleEdit]);
+  useEffect(() => {
+    if (editing && pendingGrab.current) {
+      const { el, x, y } = pendingGrab.current;
+      pendingGrab.current = null;
+      el.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          view: window,
+        }),
+      );
+    }
+  }, [editing]);
+  useEffect(() => {
+    const release = () => {
+      cancelPress();
+      setTimeout(() => (suppressClick.current = false), 150);
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+    };
+  }, [cancelPress]);
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e: DragEvent) =>
+      !!e.dataTransfer?.types.includes("Files") &&
+      !(e.target as HTMLElement | null)?.closest?.(".capture-composer");
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth++;
+      setDropping(true);
+    };
+    const over = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const leave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (!depth) setDropping(false);
+    };
+    const drop = (e: DragEvent) => {
+      depth = 0;
+      setDropping(false);
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      addFilesRef.current([...(e.dataTransfer?.files ?? [])]);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 4500);
@@ -368,6 +463,19 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     }
     update((old) => ({ ...old, tiles }));
   };
+  const patchConfig = (id: string, patch: Partial<Tile["config"]>) =>
+    update((old) => ({
+      ...old,
+      tiles: old.tiles.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              updatedAt: new Date().toISOString(),
+              config: { ...t.config, ...patch },
+            }
+          : t,
+      ),
+    }));
   const toggleItem = (tileId: string, id: string) =>
     update((old) => {
       const toggle = (tile: Tile) =>
@@ -466,6 +574,11 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       setDialog(type);
       return;
     }
+    if (type === "file") {
+      setDialog(null);
+      fileInput.current?.click();
+      return;
+    }
     try {
       const next = createTile(
         type,
@@ -474,6 +587,12 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         desktop.settings.maxTiles,
         desktop.settings,
       );
+      if (type === "progress") {
+        const now = Date.now();
+        next.title = "Timer";
+        next.config.startsAt = new Date(now).toISOString();
+        next.config.endsAt = new Date(now + 25 * 60_000).toISOString();
+      }
       update((old) => ({ ...old, tiles: [...old.tiles, next] }));
       setSelected(next.id);
       setEditing(true);
@@ -482,6 +601,65 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       setNotice((e as Error).message);
     }
   };
+  const addFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setNotice(files.length > 1 ? "Carico i file…" : "Carico il file…");
+    try {
+      const stored: UploadedFile[] = [];
+      for (const file of files.slice(0, 10))
+        stored.push(await uploadFile(file));
+      let added = 0;
+      const skipped: string[] = [];
+      update((old) => {
+        let tiles = old.tiles;
+        for (const item of stored) {
+          const type = item.kind === "image" ? "image" : "file";
+          const sizes =
+            type === "image"
+              ? [
+                  { w: 2, h: 2 },
+                  { w: 1, h: 1 },
+                ]
+              : [
+                  { w: 2, h: 2 },
+                  { w: 1, h: 2 },
+                  { w: 1, h: 1 },
+                ];
+          const size = sizes.find((candidate) =>
+            findTileSpace(tiles, candidate, old.settings),
+          );
+          try {
+            if (!size) throw new Error("La griglia è piena.");
+            const tile = createTile(
+              type,
+              tiles,
+              size,
+              old.settings.maxTiles,
+              old.settings,
+            );
+            tile.title = item.name.replace(/\.[^.]+$/, "") || item.name;
+            if (type === "image") tile.config.image = item.url;
+            else tile.config.file = item.url;
+            tiles = [...tiles, tile];
+            added++;
+          } catch (e) {
+            skipped.push((e as Error).message);
+          }
+        }
+        return { ...old, tiles };
+      });
+      setNotice(
+        skipped.length
+          ? `${added ? `${added} aggiunti. ` : ""}${skipped[0]}`
+          : added === 1
+            ? "Tile aggiunta al desktop."
+            : `${added} tile aggiunte al desktop.`,
+      );
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  };
+  addFilesRef.current = (files) => void addFiles(files);
   const saveLayout = (_layout: Layout[], _oldItem: Layout, item: Layout) => {
     const current = desktop.tiles.find((t) => t.id === item.i);
     if (current)
@@ -494,12 +672,82 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         updatedAt: new Date().toISOString(),
       });
   };
+  // Hover parallax: the tile leans towards the pointer, with a soft highlight following it.
+  const tiltTile = (
+    e: React.PointerEvent<HTMLDivElement>,
+    t: Tile,
+    reset: boolean,
+  ) => {
+    const article = e.currentTarget.firstElementChild as HTMLElement | null;
+    if (!article) return;
+    if (
+      reset ||
+      e.pointerType !== "mouse" ||
+      press.current ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      for (const name of ["--rx", "--ry", "--mx", "--my", "--tilt"])
+        article.style.removeProperty(name);
+      return;
+    }
+    const box = article.getBoundingClientRect();
+    const px = (e.clientX - box.left) / box.width - 0.5;
+    const py = (e.clientY - box.top) / box.height - 0.5;
+    const max = 9 / Math.sqrt(Math.max(t.w, t.h));
+    article.style.setProperty("--ry", `${(px * 2 * max).toFixed(2)}deg`);
+    article.style.setProperty("--rx", `${(-py * 2 * max).toFixed(2)}deg`);
+    article.style.setProperty("--mx", `${((px + 0.5) * 100).toFixed(1)}%`);
+    article.style.setProperty("--my", `${((py + 0.5) * 100).toFixed(1)}%`);
+    article.style.setProperty("--tilt", "1");
+  };
   const renderTile = (t: Tile) => (
     <div
       key={t.id}
       id={`tile-${t.id}`}
       data-testid={`tile-${t.type}`}
-      className={`tile-shell size-${t.w}-${t.h} ${selected === t.id ? (editing ? "selected" : "search-selected") : ""}`}
+      className={`tile-shell size-${t.w}-${t.h} ${selected === t.id ? (editing ? "selected" : "search-selected") : ""} ${pressing === t.id ? "pressing" : ""}`}
+      onDragStart={(e) => e.preventDefault()}
+      onClickCapture={(e) => {
+        if (!suppressClick.current) return;
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onPointerDown={(e) => {
+        if (
+          editing ||
+          e.button !== 0 ||
+          !(space.fitted || width >= 650) ||
+          (e.target as HTMLElement).closest("input,textarea,select")
+        )
+          return;
+        cancelPress();
+        const el = e.currentTarget;
+        const { clientX: x, clientY: y } = e;
+        const mouse = e.pointerType === "mouse";
+        setPressing(t.id);
+        press.current = {
+          x,
+          y,
+          timer: setTimeout(() => {
+            press.current = null;
+            setPressing(null);
+            suppressClick.current = true;
+            if (mouse) pendingGrab.current = { el, x, y };
+            setEditing(true);
+            setSelected(null);
+          }, 500),
+        };
+      }}
+      onPointerMove={(e) => {
+        if (
+          press.current &&
+          Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) >
+            8
+        )
+          cancelPress();
+        tiltTile(e, t, editing);
+      }}
+      onPointerLeave={(e) => tiltTile(e, t, true)}
     >
       <article
         className={`tile tile-${t.type} font-${t.appearance.font}`}
@@ -510,7 +758,10 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         onClick={(e) => {
           if (
             !editing &&
-            (t.type === "text" || t.type === "data" || t.type === "folder") &&
+            (t.type === "text" ||
+              t.type === "data" ||
+              t.type === "folder" ||
+              t.type === "file") &&
             !(e.target as HTMLElement).closest("button,a,input")
           )
             t.type === "folder" ? setOpenFolderId(t.id) : setExpandedId(t.id);
@@ -527,6 +778,8 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             tile={t}
             editing={editing}
             toggleItem={(id) => toggleItem(t.id, id)}
+            updateConfig={(patch) => patchConfig(t.id, patch)}
+            onTimerFinish={onTimerFinish}
           />
         </div>
         {!editing && (t.type === "text" || t.type === "data") && (
@@ -562,6 +815,15 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             </button>
           </div>
         )}
+        {!editing && t.type === "file" && t.config.file && (
+          <button
+            className="tile-expand"
+            onClick={() => setExpandedId(t.id)}
+            aria-label={`Apri ${t.title}`}
+          >
+            Apri
+          </button>
+        )}
         {!editing && t.type === "folder" && (
           <button
             className="tile-expand"
@@ -594,6 +856,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           </button>
         )}
       </article>
+      {editing && (
+        <button
+          className="tile-delete"
+          aria-label={`Elimina ${t.title}`}
+          title="Elimina"
+          onClick={() => setDeleting(t)}
+        >
+          <X size={13} />
+        </button>
+      )}
     </div>
   );
   const s = desktop.settings;
@@ -624,6 +896,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       style={
         {
           ...wallpaper,
+          "--desktop-ink": ink,
           "--tile-radius": `${s.radius}px`,
           "--tile-density": density,
           "--dock-height": `${dockHeight}px`,
@@ -632,6 +905,9 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         } as CSSProperties
       }
     >
+      {(s.wallpaper === "ascii" || s.wallpaper === "noise") && (
+        <AnimatedWallpaper kind={s.wallpaper} background={s.background} />
+      )}
       <header className="desktop-header">
         <div className="wordmark">edon</div>
         <span className="desktop-name">{s.name}</span>
@@ -830,6 +1106,24 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           }}
         />
       )}
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        hidden
+        aria-label="Scegli file da aggiungere"
+        onChange={(e) => {
+          void addFiles([...(e.target.files ?? [])]);
+          e.target.value = "";
+        }}
+      />
+      {dropping && (
+        <div className="drop-overlay" aria-hidden="true">
+          <FileUp size={34} />
+          Rilascia per aggiungere al desktop
+          <small>Immagini e PDF diventano tile con anteprima</small>
+        </div>
+      )}
       {dialog === "add" && (
         <Modal title="A cosa vuoi dare spazio?" onClose={closeDialog}>
           <p className="modal-intro">
@@ -867,6 +1161,19 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                   "Cartella",
                   "Un contenitore per organizzare le tile",
                 ],
+                [CloudSun, "weather", "Meteo", "Il tempo nella tua città"],
+                [
+                  Timer,
+                  "progress",
+                  "Timer o scadenza",
+                  "Una barra che si riempie col tempo",
+                ],
+                [
+                  FileUp,
+                  "file",
+                  "File o PDF",
+                  "Con anteprima. Puoi anche trascinarli qui",
+                ],
               ] as const
             ).map(([Icon, type, title, description]) => (
               <button
@@ -875,10 +1182,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                   atCapacity ||
                   !findTileSpace(
                     desktop.tiles,
-                    {
-                      w: type === "clock" || type === "folder" ? 2 : 1,
-                      h: type === "folder" ? 2 : 1,
-                    },
+                    type === "file" ? { w: 1, h: 1 } : defaultTileSize(type),
                     s,
                   )
                 }
@@ -921,7 +1225,9 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         >
           <FolderView
             folder={openFolder}
-            available={desktop.tiles.filter((t) => t.type !== "folder")}
+            available={desktop.tiles.filter((t) =>
+              (folderChildTypes as readonly string[]).includes(t.type),
+            )}
             onChange={setTile}
             onMoveIn={(id) => moveIntoFolder(openFolder.id, id)}
             onMoveOut={(id) => moveOutOfFolder(openFolder.id, id)}

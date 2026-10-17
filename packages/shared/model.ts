@@ -7,6 +7,9 @@ export const tileTypes = [
   "data",
   "clock",
   "folder",
+  "weather",
+  "progress",
+  "file",
 ] as const;
 export type TileType = (typeof tileTypes)[number];
 export const tileSizeLimits: Record<TileType, { w: number; h: number }> = {
@@ -16,7 +19,19 @@ export const tileSizeLimits: Record<TileType, { w: number; h: number }> = {
   image: { w: 2, h: 2 },
   clock: { w: 2, h: 2 },
   folder: { w: 2, h: 2 },
+  weather: { w: 2, h: 2 },
+  progress: { w: 2, h: 2 },
+  file: { w: 3, h: 3 },
 };
+/** The size a new tile of this type starts with. */
+export const defaultTileSize = (type: TileType) =>
+  ({
+    clock: { w: 2, h: 1 },
+    folder: { w: 2, h: 2 },
+    weather: { w: 2, h: 1 },
+    progress: { w: 2, h: 1 },
+    file: { w: 2, h: 2 },
+  })[type as string] ?? { w: 1, h: 1 };
 export const tileSizeAllowed = (tile: {
   type: TileType;
   w: number;
@@ -39,6 +54,27 @@ export const safeLink = (value: string) => {
     return false;
   }
 };
+/** Black or white text, whichever reads better on this colour (WCAG relative luminance). */
+export function readableInk(background: string) {
+  const channel = (offset: number) => {
+    const c = parseInt(background.slice(offset, offset + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance =
+    0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  return luminance > 0.179 ? "#111111" : "#ffffff";
+}
+export const safeFile = (value: string) =>
+  /^\/uploads\/[a-f0-9-]{36}\.[a-z0-9]{1,8}$/.test(value);
+export const isPdf = (value: string) => /\.pdf$/i.test(value);
+const fileUrl = z
+  .string()
+  .max(200)
+  .refine((v) => !v || safeFile(v), "Usa un file caricato.");
+const instant = z
+  .string()
+  .max(40)
+  .refine((v) => !v || !Number.isNaN(Date.parse(v)), "Data non valida.");
 export const safeImage = (value: string) =>
   /^\/(?:art\/[\w.-]+\.svg|uploads\/[\w-]+\.(?:png|jpg|gif|webp))$/.test(
     value,
@@ -113,6 +149,15 @@ const baseConfigSchema = z.object({
   body: z.string().max(10000),
   icon: z.string().max(12),
   image: imageUrl,
+  /** City of a weather tile. */
+  location: z.string().max(100).default(""),
+  /** Uploaded file shown by a file tile. */
+  file: fileUrl.default(""),
+  /** A progress tile fills between these two instants (timer or deadline). */
+  startsAt: instant.default(""),
+  endsAt: instant.default(""),
+  /** Set while a timer is paused; resuming shifts startsAt and endsAt by the pause. */
+  pausedAt: instant.default(""),
   timezone: z
     .string()
     .max(100)
@@ -180,7 +225,7 @@ export const settingsSchema = z.object({
   maxTiles: z.number().int().min(1).max(100).optional(),
   columns: z.number().int().min(2).max(12).optional(),
   rows: z.number().int().min(2).max(128).optional(),
-  wallpaper: z.enum(["fold", "solid", "gradient", "image"]),
+  wallpaper: z.enum(["fold", "solid", "gradient", "image", "ascii", "noise"]),
   background: z.string().regex(/^#[\da-fA-F]{6}$/),
   wallpaperImage: imageUrl,
   radius: z.number().min(0).max(40).default(14),
@@ -274,17 +319,25 @@ export function createTile(
       data: "Da ricordare",
       clock: "Ora locale",
       folder: "Nuova cartella",
+      weather: "Meteo",
+      progress: "Scadenza",
+      file: "Nuovo file",
     }[type],
     subtitle: "",
     x: 0,
     y: 0,
-    w: size?.w ?? (type === "clock" || type === "folder" ? 2 : 1),
-    h: size?.h ?? (type === "folder" ? 2 : 1),
+    w: size?.w ?? defaultTileSize(type).w,
+    h: size?.h ?? defaultTileSize(type).h,
     appearance: { ...presets.minimal },
     config: {
       body: "",
       icon: "↗",
       image: "",
+      location: "",
+      file: "",
+      startsAt: "",
+      endsAt: "",
+      pausedAt: "",
       timezone: "",
       items: [],
       children: [],
@@ -331,6 +384,11 @@ export function createFolderChild(
       body: "",
       icon: "↗",
       image: "",
+      location: "",
+      file: "",
+      startsAt: "",
+      endsAt: "",
+      pausedAt: "",
       timezone: "",
       items: [],
     },
@@ -341,11 +399,12 @@ export function createFolderChild(
 
 /** Moves a desktop tile into a folder; position and agent bookkeeping stay behind. */
 export function tileToFolderChild(tile: Tile): FolderChild | null {
-  if (tile.type === "folder") return null;
+  const type = tile.type;
+  if (!(folderChildTypes as readonly string[]).includes(type)) return null;
   const { children: _children, ...config } = tile.config;
   return {
     id: tile.id,
-    type: tile.type,
+    type: type as FolderChildType,
     title: tile.title,
     subtitle: tile.subtitle,
     url: tile.url,
@@ -362,7 +421,7 @@ export function folderChildToTile(
   tiles: Tile[],
   grid: { columns: number; rows: number },
 ): Tile | null {
-  const size = { w: child.type === "clock" ? 2 : 1, h: 1 };
+  const size = defaultTileSize(child.type);
   const position = findTileSpace(tiles, size, grid);
   if (!position) return null;
   return {

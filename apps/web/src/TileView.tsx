@@ -8,7 +8,12 @@ import {
   StickyNote,
 } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent";
-import type { Desktop, Tile } from "../../../packages/shared/model";
+import { FileTile, ProgressTile, WeatherTile } from "./ExtraTiles";
+import {
+  readableInk,
+  type Desktop,
+  type Tile,
+} from "../../../packages/shared/model";
 export function tileStyle(
   tile: Tile,
   settings: Desktop["settings"],
@@ -19,7 +24,7 @@ export function tileStyle(
     backgroundColor: settings.blur
       ? `color-mix(in srgb, ${a.background} 78%, transparent)`
       : a.background,
-    color: a.color,
+    color: readableInk(a.background),
     borderRadius: settings.radius,
     padding: settings.padding,
     opacity: settings.opacity,
@@ -77,15 +82,30 @@ export function TileView({
   toggleItem,
   expanded = false,
   onAddItem,
+  updateConfig,
+  onTimerFinish,
 }: {
   tile: Tile;
   editing: boolean;
   toggleItem: (id: string) => void;
   expanded?: boolean;
   onAddItem?: (text: string) => void;
+  updateConfig?: (patch: Partial<Tile["config"]>) => void;
+  onTimerFinish?: (title: string) => void;
 }) {
   if (tile.type === "clock") return <Clock tile={tile} />;
   if (tile.type === "folder") return <FolderPreview tile={tile} />;
+  if (tile.type === "weather") return <WeatherTile tile={tile} />;
+  if (tile.type === "progress")
+    return (
+      <ProgressTile
+        tile={tile}
+        editing={editing}
+        onConfig={updateConfig}
+        onFinish={onTimerFinish}
+      />
+    );
+  if (tile.type === "file") return <FileTile tile={tile} expanded={expanded} />;
   if (tile.type === "link")
     return (
       <>
@@ -183,7 +203,7 @@ export function TileView({
       />
       {!expanded && tile.config.items.length > 0 && (
         <div
-          className="tile-progress"
+          className="todo-progress"
           role="progressbar"
           aria-label="Attività completate"
           aria-valuemin={0}
@@ -243,7 +263,7 @@ function FolderPreview({ tile }: { tile: Tile }) {
               className="folder-mini"
               style={{
                 backgroundColor: c.appearance.background,
-                color: c.appearance.color,
+                color: readableInk(c.appearance.background),
               }}
               title={c.title}
             >

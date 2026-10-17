@@ -1,22 +1,36 @@
 # TODO
 
-- [ ] Tenere premuto un tile per riposizionarlo
-- [ ] 1 o 2 sfondi animati:
-    - [ ] Cerchio in alto a sinistra che ruota, il cerchio è fatto di caratteri ASCII + la scritta EDON e NODE che si ripete all'infinito, il tutto con dithering.
-    - [ ] perlin noise classico, dithering
+- [ ] Modificare la trasparenza dello sfondo
+- [ ] Migliorare la gestione delle cartelle!
 - [ ] Aggiungere un'integrazione profonda con Obsidian.
+- [ ] Scrivere una documentazione approfondita.
 - [ ] Aggiungere un'integrazione profonda con Paperless-ngx.
 - [ ] Aggiungere l'integrazione con Google Calendar.
 - [ ] Consentire la configurazione di tutte le integrazioni sia tramite lo stack Docker sia dall'interfaccia, nelle impostazioni.
 - [ ] Aggiungere un'estetica Wii-style: Nintendo anni 2000–2010, iisu, Cocoon, [Neo-Vectorheart](https://cari.institute/aesthetics/neo-vectorheart), [Neo-Y2K](https://cari.institute/aesthetics/neo-y2k) e glasstype.
-- [ ] Aggiungere tile con barre di avanzamento.
-- [ ] Scrivere una documentazione approfondita.
 - [x] Animazioni e micro-interazioni di prodotto (entrance tile, dialog, toast, hover) nel rispetto di `prefers-reduced-motion`.
     - [ ] NO, le animazioni vanno fatte per bene e devono essere molto presenti.
+- [ ] Aggiungere la possibilità di fare più viste (Tipo vista lavoro, vista personale, ecc.) e poterle cambiare velocemente.
+
 
 
 ---
-
+- [x] Quando sono in modalità modifica, compare un pulsante nei tile per eliminare velocemente.
+- [x] Lo sfondo ruotante non è centrato sulla scritta in alto a sinistra "edon".
+    - andrebbe fatto anche che gli archi della circonferenza arrivano molto più distanti, cioè c'è più roba
+    - il testo EDON e NODE lo vorrei normale e non in ASCII e lo vorrei che girasse attorno alla circonferenza, tipo come se fosse scritto su un cerchio, e che ruotasse insieme al cerchio.
+- [x] Quando passo sopra un tile con il mouse vorrei un effetto parallasse 3D, cioè il tile si muove leggermente in base alla posizione del mouse sopra di esso.
+- [x] Con sfondo scuro mettere testo bianco e con sfondo chiaro mettere testo nero, in modo automatico.
+- [x] Lo sfondo animato non funziona
+- [x] tile timer
+- [x] Tile del meteo
+- [x] Tenere premuto un tile per riposizionarlo
+- [x] 1 o 2 sfondi animati:
+    - [x] Cerchio in alto a sinistra che ruota, il cerchio è fatto di caratteri ASCII + la scritta EDON e NODE che si ripete all'infinito, il tutto con dithering.
+    - [x] perlin noise classico, dithering
+- [x] Aggiungere tile con barre di avanzamento (esempio timer o promemoria di scadenza).
+- [x] Poter mostrare anche pdf tile.
+- [x] Poter fare drag e drop di file per metterli nel desktop a tile, e se il file è un PDF o un'immagine creare un tile che mostra l'anteprima del file.
 - [x] Va tolto il simbolo del marchio registrato nel logo.
 - [x] Bottone delle impostazioni in alto a destra accanto al tasto di logout.
 - [x] Togliere il testo e il puntino "tutto salvato" in basso a destra.

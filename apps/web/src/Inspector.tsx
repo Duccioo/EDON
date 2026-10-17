@@ -10,13 +10,28 @@ import {
 } from "lucide-react";
 import {
   presets,
+  readableInk,
   tileSchema,
   tileSizeLimits,
   type Appearance,
   type Tile,
 } from "../../../packages/shared/model";
-import { upload } from "./api";
+import { upload, uploadFile } from "./api";
 import { ColorPalette } from "./ColorPalette";
+/** An ISO instant as the value of a datetime-local input (device time zone). */
+const toLocalInput = (iso: string) => {
+  const t = Date.parse(iso);
+  if (!t) return "";
+  const d = new Date(t - new Date(t).getTimezoneOffset() * 60_000);
+  return d.toISOString().slice(0, 16);
+};
+const timers = [
+  [5, "5 min"],
+  [15, "15 min"],
+  [25, "25 min"],
+  [60, "1 ora"],
+] as const;
+
 export function Inspector({
   tile,
   canDuplicate,
@@ -48,8 +63,32 @@ export function Inspector({
     setError("");
     onChange(parsed.data);
   };
+  // The text colour follows the background on its own: white on dark, black on light.
   const appearance = (value: Partial<Appearance>) =>
-    patch({ appearance: { ...tile.appearance, ...value } });
+    patch({
+      appearance: {
+        ...tile.appearance,
+        ...value,
+        ...(value.background ? { color: readableInk(value.background) } : {}),
+      },
+    });
+  async function replaceFile(file?: File) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const stored = await uploadFile(file);
+      patch({
+        config: { ...tile.config, file: stored.url },
+        title: tile.title === "Nuovo file" ? stored.name : tile.title,
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const setConfig = (value: Partial<Tile["config"]>) =>
+    patch({ config: { ...tile.config, ...value } });
   async function fileChange(file?: File, background = false) {
     if (!file) return;
     setBusy(true);
@@ -173,6 +212,7 @@ export function Inspector({
         )}
         {(tile.type === "link" ||
           tile.type === "image" ||
+          tile.type === "file" ||
           tile.type === "data") && (
           <label>
             Destinazione
@@ -210,6 +250,88 @@ export function Inspector({
               }
             />
             <small>Vuoto per usare l’ora del dispositivo.</small>
+          </label>
+        )}
+        {tile.type === "weather" && (
+          <label>
+            Città
+            <input
+              defaultValue={tile.config.location}
+              key={`${tile.id}-city`}
+              placeholder="Firenze, New York…"
+              maxLength={100}
+              onBlur={(e) => setConfig({ location: e.target.value.trim() })}
+            />
+            <small>Dati Open-Meteo, aggiornati ogni 10 minuti.</small>
+          </label>
+        )}
+        {tile.type === "progress" && (
+          <fieldset>
+            <legend>Tempo</legend>
+            <div className="sizes" role="group" aria-label="Avvia un timer">
+              {timers.map(([minutes, label]) => (
+                <button
+                  key={minutes}
+                  onClick={() => {
+                    const now = Date.now();
+                    setConfig({
+                      startsAt: new Date(now).toISOString(),
+                      endsAt: new Date(now + minutes * 60_000).toISOString(),
+                    });
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label>
+              Inizio
+              <input
+                type="datetime-local"
+                defaultValue={toLocalInput(tile.config.startsAt)}
+                key={`${tile.id}-${tile.config.startsAt}-start`}
+                onBlur={(e) =>
+                  setConfig({
+                    startsAt: e.target.value
+                      ? new Date(e.target.value).toISOString()
+                      : "",
+                  })
+                }
+              />
+            </label>
+            <label>
+              Scadenza
+              <input
+                type="datetime-local"
+                defaultValue={toLocalInput(tile.config.endsAt)}
+                key={`${tile.id}-${tile.config.endsAt}-end`}
+                onBlur={(e) =>
+                  setConfig({
+                    endsAt: e.target.value
+                      ? new Date(e.target.value).toISOString()
+                      : "",
+                  })
+                }
+              />
+            </label>
+            <p className="hint">
+              La barra si riempie dall’inizio alla scadenza. Senza inizio parte
+              dalla creazione della tile.
+            </p>
+          </fieldset>
+        )}
+        {tile.type === "file" && (
+          <label className="file-button">
+            {busy
+              ? "Caricamento…"
+              : tile.config.file
+                ? "Sostituisci il file"
+                : "Carica un file"}
+            <input
+              type="file"
+              disabled={busy}
+              onChange={(e) => void replaceFile(e.target.files?.[0])}
+            />
           </label>
         )}
         {tile.type === "image" && (
@@ -291,7 +413,7 @@ export function Inspector({
             }
           />
           <details className="custom-colors">
-            <summary>Colori personalizzati</summary>
+            <summary>Colore personalizzato</summary>
             <div className="field-row">
               <label>
                 Sfondo
@@ -299,14 +421,6 @@ export function Inspector({
                   type="color"
                   value={tile.appearance.background}
                   onChange={(e) => appearance({ background: e.target.value })}
-                />
-              </label>
-              <label>
-                Testo
-                <input
-                  type="color"
-                  value={tile.appearance.color}
-                  onChange={(e) => appearance({ color: e.target.value })}
                 />
               </label>
             </div>

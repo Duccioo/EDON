@@ -61,7 +61,10 @@ Perché Hermes possa creare le tile, deve avere EDON come server MCP (sezione so
 - Usa una **chiave stabile** (`upsert_tile`, `PUT /api/tiles/by-key/:key`) per contenuti ricorrenti: aggiorna la tile invece di duplicarla.
 - `expiresAt` rimuove la tile alla scadenza (es. riepilogo di una riunione per sette giorni).
 - Le **cartelle** (`type: "folder"`, max 24 elementi in `config.children`, senza annidamento) raggruppano mini-tile create con `createFolderChild`: utili per progetti («metti insieme note e link del progetto X»).
-- Nessun codice viene eseguito: le tile sono dati dichiarativi (`text`, `data`, `link`, `image`, `clock`, `folder`) con aspetto configurabile.
+- **Meteo** (`weather`): `config.location` è la città; il server interroga Open-Meteo (senza chiave) e mette in cache 10 minuti.
+- **Timer e scadenze** (`progress`): la barra si riempie da `config.startsAt` a `config.endsAt` (ISO 8601). Un timer ha `startsAt` = adesso.
+- **File** (`file`): `config.file` è un percorso `/uploads/…` già caricato dall’utente (trascinando un file sul desktop o dal catalogo); i PDF mostrano la prima pagina. Gli agenti non caricano file.
+- Nessun codice viene eseguito: le tile sono dati dichiarativi (`text`, `data`, `link`, `image`, `clock`, `folder`, `weather`, `progress`, `file`) con aspetto configurabile.
 
 ## Esempi
 

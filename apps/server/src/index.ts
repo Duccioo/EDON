@@ -18,7 +18,13 @@ await app.listen({
   host: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 3001),
 });
-for (const signal of ["SIGINT", "SIGTERM"])
+let closing = false;
+for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
+    // Watchers restart the server with SIGTERM; say so, and never hang on a stuck connection.
+    if (closing) return;
+    closing = true;
+    app.log.info(`${signal} received, shutting down`);
+    setTimeout(() => process.exit(0), 3000).unref();
     void app.close().then(() => process.exit(0));
   });

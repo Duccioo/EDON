@@ -3,6 +3,7 @@ import { StickyNote } from "lucide-react";
 import type { Desktop } from "../../../packages/shared/model";
 import { fitBoard } from "../../../packages/shared/board";
 import { TileView, tileStyle } from "./TileView";
+import { AnimatedWallpaper } from "./AnimatedWallpaper";
 
 export function AppearancePreview({
   settings,
@@ -40,6 +41,13 @@ export function AppearancePreview({
       </div>
       <p>Il tuo desktop, in piccolo. Ogni modifica è già visibile qui.</p>
       <div ref={ref} className="appearance-mini-desktop" style={background}>
+        {(settings.wallpaper === "ascii" || settings.wallpaper === "noise") && (
+          <AnimatedWallpaper
+            kind={settings.wallpaper}
+            background={settings.background}
+            contained
+          />
+        )}
         <div
           aria-hidden="true"
           className="mini-board-frame"

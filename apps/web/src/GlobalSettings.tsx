@@ -4,6 +4,11 @@ import { upload } from "./api";
 import { AppearancePreview } from "./AppearancePreview";
 import { ColorPalette } from "./ColorPalette";
 
+/** Colour changes keep a wallpaper that is built from the colour; photos and folds become solid. */
+const keepsColor = (wallpaper: string) =>
+  ["gradient", "ascii", "noise"].includes(wallpaper)
+    ? (wallpaper as "gradient" | "ascii" | "noise")
+    : "solid";
 export function GlobalSettings({
   settings,
   tiles,
@@ -204,28 +209,36 @@ export function GlobalSettings({
             onSelect={({ background }) =>
               patch({
                 background,
-                wallpaper:
-                  settings.wallpaper === "gradient" ? "gradient" : "solid",
+                wallpaper: keepsColor(settings.wallpaper),
               })
             }
           />
           <div className="wallpaper-choices">
-            {(["fold", "solid", "gradient", "image"] as const).map(
-              (value, i) => (
-                <button
-                  aria-pressed={settings.wallpaper === value}
-                  className={settings.wallpaper === value ? "active" : ""}
-                  key={value}
-                  onClick={() => patch({ wallpaper: value })}
-                >
-                  <span
-                    className={`wallpaper-preview preview-${value}`}
-                    style={{ backgroundColor: settings.background }}
-                  />
-                  {["Pieghe", "Tinta unita", "Gradiente", "Immagine"][i]}
-                </button>
-              ),
-            )}
+            {(
+              ["fold", "solid", "gradient", "image", "ascii", "noise"] as const
+            ).map((value, i) => (
+              <button
+                aria-pressed={settings.wallpaper === value}
+                className={settings.wallpaper === value ? "active" : ""}
+                key={value}
+                onClick={() => patch({ wallpaper: value })}
+              >
+                <span
+                  className={`wallpaper-preview preview-${value}`}
+                  style={{ backgroundColor: settings.background }}
+                />
+                {
+                  [
+                    "Pieghe",
+                    "Tinta unita",
+                    "Gradiente",
+                    "Immagine",
+                    "ASCII",
+                    "Rumore",
+                  ][i]
+                }
+              </button>
+            ))}
           </div>
           <details className="custom-colors">
             <summary>Colore personalizzato</summary>
@@ -237,8 +250,7 @@ export function GlobalSettings({
                 onChange={(e) =>
                   patch({
                     background: e.target.value,
-                    wallpaper:
-                      settings.wallpaper === "gradient" ? "gradient" : "solid",
+                    wallpaper: keepsColor(settings.wallpaper),
                   })
                 }
               />

@@ -7,7 +7,7 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "concurrently -k -n server,web \"node --watch --import tsx apps/server/src/index.ts\" \"vite --config apps/web/vite.config.ts\"",
+    "dev": "concurrently -k -n server,web \"tsx watch apps/server/src/index.ts\" \"vite --config apps/web/vite.config.ts\"",
     "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts",
     "start": "node --import tsx apps/server/src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
@@ -25,6 +25,7 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "fastify": "^5.6.0",
     "lucide-react": "^0.468.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-grid-layout": "^1.5.4",

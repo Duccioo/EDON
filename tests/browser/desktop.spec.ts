@@ -695,3 +695,133 @@ test("grid columns and rows persist and a too-small grid keeps all tiles", async
     });
   }
 });
+
+const pdfBase64 = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nBT /F1 24 Tf 20 100 Td (Ciao EDON) Tj ET\nendstream\nendobj\n5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R/Size 6>>\n%%EOF",
+).toString("base64");
+
+test("dropping files creates tiles: PDFs get a preview, other files a download tile", async ({
+  page,
+}) => {
+  await page.evaluate(async (pdf) => {
+    const bytes = (b64: string) =>
+      Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(
+      new File([bytes(pdf)], "Contratto.pdf", { type: "application/pdf" }),
+    );
+    data.items.add(new File(["ciao"], "appunti.txt", { type: "text/plain" }));
+    window.dispatchEvent(
+      new DragEvent("dragenter", { dataTransfer: data, bubbles: true }),
+    );
+    window.dispatchEvent(
+      new DragEvent("drop", {
+        dataTransfer: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, pdfBase64);
+  const pdf = page.getByTestId("tile-file").filter({ hasText: "Contratto" });
+  await expect(pdf).toBeVisible();
+  await expect(pdf.locator(".pdf-preview canvas")).toBeVisible();
+  await expect(
+    page.getByTestId("tile-file").filter({ hasText: "appunti" }),
+  ).toBeVisible();
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+  await pdf.getByRole("button", { name: "Apri Contratto" }).click();
+  await expect(
+    page.getByRole("dialog").locator("iframe.pdf-frame"),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  const saved = await (await page.request.get("/api/desktop")).json();
+  expect(
+    saved.tiles.filter((t: { type: string }) => t.type === "file"),
+  ).toHaveLength(2);
+});
+
+test("weather and timer tiles come from the catalog", async ({ page }) => {
+  await page.route("**/api/weather*", (route) =>
+    route.fulfill({
+      json: {
+        location: "Firenze",
+        temperature: 21,
+        code: 0,
+        isDay: true,
+        wind: 5,
+        min: 12,
+        max: 24,
+        updatedAt: new Date().toISOString(),
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "Altre azioni" }).click();
+  await page
+    .getByRole("button", { name: "Aggiungi tile", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Meteo Il tempo/ }).click();
+  const inspector = page.getByRole("complementary", {
+    name: "Proprietà della tile",
+  });
+  await inspector.getByLabel("Città").fill("Firenze");
+  await inspector.getByLabel("Città").blur();
+  const weather = page.getByTestId("tile-weather").first();
+  await expect(weather.getByText("21°")).toBeVisible();
+  await page.getByRole("button", { name: "Fine", exact: true }).click();
+  await page.getByRole("button", { name: "Altre azioni" }).click();
+  await page
+    .getByRole("button", { name: "Aggiungi tile", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Timer o scadenza/ }).click();
+  const timer = page.getByTestId("tile-progress").first();
+  await expect(timer.getByRole("progressbar")).toBeVisible();
+  await expect(timer).toContainText(/2[45]:\d\d/);
+  await page.getByRole("button", { name: "Fine", exact: true }).click();
+  await timer.getByRole("button", { name: "Pausa" }).click();
+  await expect(timer.getByText("In pausa")).toBeVisible();
+  const frozen = await timer.locator(".progress-main").textContent();
+  await page.waitForTimeout(2200);
+  await expect(timer.locator(".progress-main")).toHaveText(frozen!);
+  await timer.getByRole("button", { name: "Riprendi" }).click();
+  await expect(timer.getByText("In pausa")).toHaveCount(0);
+  await timer.getByRole("button", { name: "Riavvia" }).click();
+  await expect(timer).toContainText(/2[45]:\d\d/);
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+});
+
+test("holding a tile lets you reposition it in one gesture", async ({
+  page,
+}) => {
+  await capture(page, "Da spostare", "una nota");
+  const tile = page.getByTestId("tile-text").filter({ hasText: "Da spostare" });
+  const id = (await tile.getAttribute("id"))!.replace("tile-", "");
+  const read = async () =>
+    (await (await page.request.get("/api/desktop")).json()).tiles.find(
+      (t: { id: string }) => t.id === id,
+    );
+  const before = await read();
+  const box = (await tile.boundingBox())!;
+  await page.keyboard.press("e");
+  const guide = (await page.locator(".grid-guides span").last().boundingBox())!;
+  await page.keyboard.press("Escape");
+  await page.mouse.move(box.x + box.width / 2, box.y + 8);
+  await page.mouse.down();
+  await expect(page.locator(".desktop.editing")).toBeVisible();
+  await page.mouse.move(box.x + box.width / 2, guide.y + 8, { steps: 15 });
+  await page.mouse.up();
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+  expect((await read()).y).toBeGreaterThan(before.y);
+});
+
+test("animated wallpapers are chosen in settings", async ({ page }) => {
+  await page.getByRole("button", { name: "Impostazioni", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Impostazioni globali" });
+  await settings.getByRole("button", { name: "Rumore" }).click();
+  await settings.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await expect(page.locator("canvas.wallpaper-noise")).toBeVisible();
+  await page.getByRole("button", { name: "Impostazioni", exact: true }).click();
+  await settings.getByRole("button", { name: "ASCII" }).click();
+  await settings.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await expect(page.locator("canvas.wallpaper-ascii")).toBeVisible();
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+});
