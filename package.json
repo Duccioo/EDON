@@ -1,0 +1,48 @@
+{
+  "name": "edon-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"node --watch --import tsx apps/server/src/index.ts\" \"vite --config apps/web/vite.config.ts\"",
+    "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts",
+    "start": "node --import tsx apps/server/src/index.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:e2e": "playwright test",
+    "format": "prettier --write apps packages tests playwright.config.ts package.json tsconfig.json",
+    "format:check": "prettier --check apps packages tests playwright.config.ts package.json tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/multipart": "^9.3.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^10.1.6",
+    "@fontsource-variable/doto": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "fastify": "^5.6.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-grid-layout": "^1.5.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tsx": "^4.20.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/react-grid-layout": "^1.3.5",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.0",
+    "vite": "^6.4.0"
+  }
+}

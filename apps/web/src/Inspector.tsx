@@ -1,0 +1,406 @@
+import { useState } from "react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Copy,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  presets,
+  tileSchema,
+  tileSizeLimits,
+  type Appearance,
+  type Tile,
+} from "../../../packages/shared/model";
+import { upload } from "./api";
+import { ColorPalette } from "./ColorPalette";
+export function Inspector({
+  tile,
+  canDuplicate,
+  onChange,
+  onDelete,
+  onDuplicate,
+  onMove,
+  onClose,
+  onOpenFolder,
+}: {
+  tile: Tile;
+  canDuplicate: boolean;
+  onChange: (value: Tile) => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onMove: (dx: number, dy: number) => void;
+  onClose: () => void;
+  onOpenFolder?: () => void;
+}) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const patch = (value: Partial<Tile>) => {
+    const next = { ...tile, ...value, updatedAt: new Date().toISOString() };
+    const parsed = tileSchema.safeParse(next);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0].message);
+      return;
+    }
+    setError("");
+    onChange(parsed.data);
+  };
+  const appearance = (value: Partial<Appearance>) =>
+    patch({ appearance: { ...tile.appearance, ...value } });
+  async function fileChange(file?: File, background = false) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const url = await upload(file);
+      if (background) appearance({ image: url });
+      else patch({ config: { ...tile.config, image: url } });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <aside
+      className="inspector"
+      aria-label="Proprietà della tile"
+      key={tile.id}
+    >
+      <div className="panel-heading">
+        <div>
+          <span className="small-label">Personalizza</span>
+          <h2>{tile.title || "Tile"}</h2>
+        </div>
+        <button
+          className="icon-button"
+          aria-label="Chiudi proprietà"
+          onClick={onClose}
+        >
+          <X size={19} />
+        </button>
+      </div>
+      <div className="inspector-content">
+        <label>
+          Titolo
+          <input
+            value={tile.title}
+            maxLength={120}
+            onChange={(e) => patch({ title: e.target.value })}
+          />
+        </label>
+        <label>
+          Sottotitolo
+          <input
+            value={tile.subtitle}
+            maxLength={250}
+            onChange={(e) => patch({ subtitle: e.target.value })}
+          />
+        </label>
+        <fieldset>
+          <legend>Dimensioni e posizione</legend>
+          <div className="sizes">
+            {Array.from(
+              {
+                length:
+                  tileSizeLimits[tile.type].w * tileSizeLimits[tile.type].h,
+              },
+              (_, i) => [
+                (i % tileSizeLimits[tile.type].w) + 1,
+                Math.floor(i / tileSizeLimits[tile.type].w) + 1,
+              ],
+            ).map(([w, h]) => (
+              <button
+                key={`${w}${h}`}
+                className={tile.w === w && tile.h === h ? "active" : ""}
+                onClick={() => patch({ w, h })}
+              >
+                {w} × {h}
+              </button>
+            ))}
+          </div>
+          <p className="hint">
+            Massimo {tileSizeLimits[tile.type].w} ×{" "}
+            {tileSizeLimits[tile.type].h} per questo tipo di tile.
+          </p>
+          <div className="move-buttons">
+            {[
+              [ArrowLeft, -1, 0, "Sposta a sinistra"],
+              [ArrowUp, 0, -1, "Sposta in alto"],
+              [ArrowDown, 0, 1, "Sposta in basso"],
+              [ArrowRight, 1, 0, "Sposta a destra"],
+            ].map(([Icon, dx, dy, label]) => {
+              const I = Icon as typeof ArrowLeft;
+              return (
+                <button
+                  key={String(label)}
+                  aria-label={String(label)}
+                  onClick={() => onMove(Number(dx), Number(dy))}
+                >
+                  <I size={16} />
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+        {tile.type === "folder" && (
+          <fieldset>
+            <legend>Contenuto</legend>
+            <p className="hint">
+              {(tile.config.children ?? []).length === 0
+                ? "La cartella è vuota."
+                : `${(tile.config.children ?? []).length} element${(tile.config.children ?? []).length === 1 ? "o" : "i"} organizzati qui dentro.`}{" "}
+              Aggiungi e modifica gli elementi aprendo la cartella.
+            </p>
+            {onOpenFolder && (
+              <button onClick={onOpenFolder}>Apri la cartella</button>
+            )}
+          </fieldset>
+        )}
+        {tile.type === "link" && (
+          <label>
+            Icona o simbolo
+            <input
+              value={tile.config.icon}
+              maxLength={12}
+              onChange={(e) =>
+                patch({ config: { ...tile.config, icon: e.target.value } })
+              }
+            />
+          </label>
+        )}
+        {(tile.type === "link" ||
+          tile.type === "image" ||
+          tile.type === "data") && (
+          <label>
+            Destinazione
+            <input
+              defaultValue={tile.url}
+              key={`${tile.id}-url`}
+              placeholder="https://… oppure obsidian://…"
+              onBlur={(e) => patch({ url: e.target.value })}
+            />
+          </label>
+        )}
+        {(tile.type === "text" ||
+          tile.type === "data" ||
+          tile.type === "image") && (
+          <label>
+            {tile.type === "image" ? "Didascalia" : "Testo"}
+            <textarea
+              rows={4}
+              value={tile.config.body}
+              onChange={(e) =>
+                patch({ config: { ...tile.config, body: e.target.value } })
+              }
+            />
+          </label>
+        )}
+        {tile.type === "clock" && (
+          <label>
+            Fuso orario
+            <input
+              defaultValue={tile.config.timezone}
+              key={`${tile.id}-zone`}
+              placeholder="Asia/Tokyo, Europe/Rome…"
+              onBlur={(e) =>
+                patch({ config: { ...tile.config, timezone: e.target.value } })
+              }
+            />
+            <small>Vuoto per usare l’ora del dispositivo.</small>
+          </label>
+        )}
+        {tile.type === "image" && (
+          <>
+            <label>
+              Immagine
+              <input
+                defaultValue={tile.config.image}
+                key={`${tile.id}-image`}
+                placeholder="URL HTTPS"
+                onBlur={(e) =>
+                  patch({ config: { ...tile.config, image: e.target.value } })
+                }
+              />
+            </label>
+            <label className="file-button">
+              {busy ? "Caricamento…" : "Carica immagine o GIF"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                disabled={busy}
+                onChange={(e) => void fileChange(e.target.files?.[0])}
+              />
+            </label>
+          </>
+        )}
+        {tile.type === "data" && (
+          <label>
+            Elenco (una voce per riga)
+            <textarea
+              rows={4}
+              defaultValue={tile.config.items
+                .map((i) => `${i.done ? "[x] " : ""}${i.text}`)
+                .join("\n")}
+              key={`${tile.id}-items`}
+              onBlur={(e) =>
+                patch({
+                  config: {
+                    ...tile.config,
+                    items: e.target.value
+                      .split("\n")
+                      .filter(Boolean)
+                      .map((text, i) => ({
+                        id: String(i),
+                        done: text.startsWith("[x] "),
+                        text: text.replace(/^\[x\] /, ""),
+                      })),
+                  },
+                })
+              }
+            />
+          </label>
+        )}
+        <fieldset>
+          <legend>Aspetto</legend>
+          <div className="presets">
+            {Object.entries(presets).map(([name, value]) => (
+              <button
+                key={name}
+                style={{ background: value.background, color: value.color }}
+                className={tile.appearance.preset === name ? "active" : ""}
+                onClick={() => patch({ appearance: { ...value } })}
+              >
+                {
+                  {
+                    minimal: "Minimal",
+                    industrial: "Dot / Industrial",
+                    glass: "Soft Glass",
+                  }[name as Appearance["preset"]]
+                }
+              </button>
+            ))}
+          </div>
+          <ColorPalette
+            value={tile.appearance.background}
+            label="Colori della tile"
+            onSelect={({ background, color }) =>
+              appearance({ background, color })
+            }
+          />
+          <details className="custom-colors">
+            <summary>Colori personalizzati</summary>
+            <div className="field-row">
+              <label>
+                Sfondo
+                <input
+                  type="color"
+                  value={tile.appearance.background}
+                  onChange={(e) => appearance({ background: e.target.value })}
+                />
+              </label>
+              <label>
+                Testo
+                <input
+                  type="color"
+                  value={tile.appearance.color}
+                  onChange={(e) => appearance({ color: e.target.value })}
+                />
+              </label>
+            </div>
+          </details>
+          <label>
+            Tipografia
+            <select
+              value={tile.appearance.font}
+              onChange={(e) =>
+                appearance({ font: e.target.value as Appearance["font"] })
+              }
+            >
+              <option value="sans">Essenziale</option>
+              <option value="mono">Monospace</option>
+              <option value="editorial">Editoriale</option>
+              <option value="dot">Dot matrix</option>
+            </select>
+          </label>
+          <p className="hint">
+            Forma, bordi e spazi interni si regolano nelle impostazioni globali.
+          </p>
+          <label>
+            Immagine di sfondo
+            <input
+              defaultValue={tile.appearance.image}
+              key={`${tile.id}-background`}
+              placeholder="URL HTTPS"
+              onBlur={(e) => appearance({ image: e.target.value })}
+            />
+          </label>
+          <label className="file-button">
+            Carica sfondo
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              disabled={busy}
+              onChange={(e) => void fileChange(e.target.files?.[0], true)}
+            />
+          </label>
+          <div className="field-row">
+            <label>
+              Adatta
+              <select
+                value={tile.appearance.fit}
+                onChange={(e) =>
+                  appearance({ fit: e.target.value as Appearance["fit"] })
+                }
+              >
+                <option value="cover">Riempi</option>
+                <option value="contain">Contieni</option>
+              </select>
+            </label>
+            <label>
+              Posizione
+              <select
+                value={tile.appearance.imagePosition}
+                onChange={(e) =>
+                  appearance({
+                    imagePosition: e.target
+                      .value as Appearance["imagePosition"],
+                  })
+                }
+              >
+                <option value="center">Centro</option>
+                <option value="top">Alto</option>
+                <option value="bottom">Basso</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+        {error && (
+          <p role="alert" className="error-text">
+            {error}
+          </p>
+        )}
+        <div className="inspector-actions">
+          <button
+            onClick={onDuplicate}
+            disabled={!canDuplicate}
+            title={
+              !canDuplicate
+                ? "Nessun posto disponibile: modifica griglia o limite in Aspetto"
+                : undefined
+            }
+          >
+            <Copy size={15} />
+            Duplica
+          </button>
+          <button className="danger" onClick={onDelete}>
+            <Trash2 size={15} />
+            Elimina
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
