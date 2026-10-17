@@ -144,7 +144,8 @@ export function Inspector({
             {Array.from(
               {
                 length:
-                  tileSizeLimits[tile.type].w * tileSizeLimits[tile.type].h,
+                  tileSizeLimits[tile.type].w *
+                  Math.min(3, tileSizeLimits[tile.type].h),
               },
               (_, i) => [
                 (i % tileSizeLimits[tile.type].w) + 1,
@@ -160,6 +161,20 @@ export function Inspector({
               </button>
             ))}
           </div>
+          {(tile.type === "text" || tile.type === "data") && (
+            <label>
+              Altezza in righe
+              <input
+                type="number"
+                min={1}
+                max={128}
+                value={tile.h}
+                onChange={(e) => {
+                  if (e.target.value) patch({ h: +e.target.value });
+                }}
+              />
+            </label>
+          )}
           <p className="hint">
             Massimo {tileSizeLimits[tile.type].w} ×{" "}
             {tileSizeLimits[tile.type].h} per questo tipo di tile.

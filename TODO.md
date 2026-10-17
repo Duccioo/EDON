@@ -1,7 +1,9 @@
 # TODO
 
-- [ ] Modificare la trasparenza dello sfondo
-- [ ] Migliorare la gestione delle cartelle!
+---
+- [ ] Passando su un tile di testo molto lungo se scorro col mouse il contenuto del tile scorre, invece di dover aprire il tile per vedere tutto il contenuto.
+- [ ] Tile calendario
+- [ ] Cliccando sul tile meteo si apre un popup con le previsioni del meteo per i prossimi giorni e con più informazioni.
 - [ ] Aggiungere un'integrazione profonda con Obsidian.
 - [ ] Scrivere una documentazione approfondita.
 - [ ] Aggiungere un'integrazione profonda con Paperless-ngx.
@@ -15,6 +17,14 @@
 
 
 ---
+- [x] Lo sfondo animato circolare è troppo oneroso, magari ridorre il numero di scritte e renderlo più efficiente.
+- [x] L'effetto 3D non funziona.
+- [x] La grandezza dei tile orizzontali facciamola a multipli di 4
+    - così per avere la vista desktop full e poi la vista mobile a 4 tipe orizzontali e poi a mò di lista
+- [x] Modificare la trasparenza dello sfondo
+- [x] Migliorare la gestione delle cartelle!
+    - [x] Quando trascino un tile a lungo sopra una cartella, la cartella si  un po' (fa un animazione) e posso rilasciare il tile dentro.
+- [x] Per i tile di testo (note, todo, ecc.) posso farli alti quanto mi pare e se c'è spazio è possibile sia aggiungere una todo direttamente al volo con un pulstante oppure aggiungere del testo alla nota direttamente al volo con un pulsante sul tile invece di dover aprire il tile e poi modificare il contenuto.
 - [x] Quando sono in modalità modifica, compare un pulsante nei tile per eliminare velocemente.
 - [x] Lo sfondo ruotante non è centrato sulla scritta in alto a sinistra "edon".
     - andrebbe fatto anche che gli archi della circonferenza arrivano molto più distanti, cioè c'è più roba

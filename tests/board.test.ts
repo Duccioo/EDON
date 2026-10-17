@@ -140,3 +140,25 @@ test("grid changes reflow tiles without changing content, reject a grid that is 
   assert.equal(migrated.settings.rows, 4);
   assert.deepEqual(migrated.tiles, desktop.tiles);
 });
+
+test("notes and todos may fill the board height while other tile limits still apply", () => {
+  for (const type of ["text", "data"] as const) {
+    const tile = createTile(type, [], { w: 2, h: 128 }, 100, {
+      columns: 8,
+      rows: 128,
+    });
+    const desktop = seedDesktop();
+    assert.ok(
+      desktopSchema.safeParse({
+        ...desktop,
+        settings: { ...desktop.settings, columns: 8, rows: 128 },
+        tiles: [tile],
+      }).success,
+    );
+    assert.equal(
+      desktopSchema.safeParse({ ...desktop, tiles: [tile] }).success,
+      false,
+    );
+  }
+  assert.throws(() => createTile("clock", [], { w: 2, h: 4 }), /massima/);
+});

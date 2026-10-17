@@ -151,7 +151,7 @@ test("agents create, upsert by key, place and delete tiles without touching the 
     });
     assert.equal(patched.json().tile.title, "Meteo Firenze");
     const layout = (await agent("GET", "/api/layout")).json();
-    assert.equal(layout.columns, 6);
+    assert.equal(layout.columns, 8);
     assert.equal(
       (
         await agent("PUT", "/api/layout", {

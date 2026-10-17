@@ -51,7 +51,7 @@ import { request, uploadFile, useDesktop, type UploadedFile } from "./api";
 import { AnimatedWallpaper } from "./AnimatedWallpaper";
 import { useDesktopInk } from "./ink";
 import { fitBoard } from "../../../packages/shared/board";
-import { TileView, tileStyle } from "./TileView";
+import { TileView, tileStyle, QuickAppend } from "./TileView";
 import { FolderView } from "./FolderView";
 import { Inspector } from "./Inspector";
 import { Modal } from "./Modal";
@@ -183,6 +183,23 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     setExpandedId(null);
     setEditingNote(false);
   }, []);
+  const folderHover = useRef<{
+    id: string;
+    ready: boolean;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const [folderTarget, setFolderTarget] = useState<string | null>(null);
+  const clearFolderHover = () => {
+    if (folderHover.current) clearTimeout(folderHover.current.timer);
+    folderHover.current = null;
+    setFolderTarget(null);
+  };
+  useEffect(
+    () => () => {
+      if (folderHover.current) clearTimeout(folderHover.current.timer);
+    },
+    [],
+  );
   const [gridEpoch, setGridEpoch] = useState(0);
   const [deleting, setDeleting] = useState<Tile | null>(null);
   const [notice, setNotice] = useState("");
@@ -690,7 +707,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         article.style.removeProperty(name);
       return;
     }
-    const box = article.getBoundingClientRect();
+    const box = e.currentTarget.getBoundingClientRect();
     const px = (e.clientX - box.left) / box.width - 0.5;
     const py = (e.clientY - box.top) / box.height - 0.5;
     const max = 9 / Math.sqrt(Math.max(t.w, t.h));
@@ -705,7 +722,10 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       key={t.id}
       id={`tile-${t.id}`}
       data-testid={`tile-${t.type}`}
-      className={`tile-shell size-${t.w}-${t.h} ${selected === t.id ? (editing ? "selected" : "search-selected") : ""} ${pressing === t.id ? "pressing" : ""}`}
+      style={
+        { "--mobile-w": Math.min(4, t.w), "--mobile-h": t.h } as CSSProperties
+      }
+      className={`tile-shell ${folderTarget === t.id ? "folder-drop-ready" : ""} size-${t.w}-${t.h} ${selected === t.id ? (editing ? "selected" : "search-selected") : ""} ${pressing === t.id ? "pressing" : ""}`}
       onDragStart={(e) => e.preventDefault()}
       onClickCapture={(e) => {
         if (!suppressClick.current) return;
@@ -716,8 +736,8 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         if (
           editing ||
           e.button !== 0 ||
-          !(space.fitted || width >= 650) ||
-          (e.target as HTMLElement).closest("input,textarea,select")
+          !space.fitted ||
+          (e.target as HTMLElement).closest("button,a,input,textarea,select")
         )
           return;
         cancelPress();
@@ -738,6 +758,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           }, 500),
         };
       }}
+      onPointerEnter={(e) => tiltTile(e, t, editing)}
       onPointerMove={(e) => {
         if (
           press.current &&
@@ -762,7 +783,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               t.type === "data" ||
               t.type === "folder" ||
               t.type === "file") &&
-            !(e.target as HTMLElement).closest("button,a,input")
+            !(e.target as HTMLElement).closest("button,a,input,textarea")
           )
             t.type === "folder" ? setOpenFolderId(t.id) : setExpandedId(t.id);
         }}
@@ -782,6 +803,12 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             onTimerFinish={onTimerFinish}
           />
         </div>
+        {!editing && (t.type === "text" || t.type === "data") && (
+          <QuickAppend
+            tile={t}
+            onConfig={(patch) => patchConfig(t.id, patch)}
+          />
+        )}
         {!editing && (t.type === "text" || t.type === "data") && (
           <div className="tile-content-actions">
             <button
@@ -968,7 +995,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                 : undefined
             }
           >
-            {(space.fitted || (editing && width >= 650)) && (
+            {space.fitted && (
               <div
                 className="grid-guides"
                 aria-hidden
@@ -1010,7 +1037,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                   Aggiungi una tile
                 </button>
               </div>
-            ) : !space.fitted && width < 650 ? (
+            ) : !space.fitted ? (
               <div className="mobile-tile-grid" style={{ gap: s.gap }}>
                 {desktop.tiles.map(renderTile)}
               </div>
@@ -1035,15 +1062,61 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                   minH: 1,
                   maxH: Math.min(s.rows, tileSizeLimits[t.type].h),
                 }))}
-                isDraggable={editing && (space.fitted || width >= 650)}
-                isResizable={editing && (space.fitted || width >= 650)}
+                isDraggable={editing && space.fitted}
+                isResizable={editing && space.fitted}
                 compactType={null}
                 allowOverlap={true}
                 preventCollision={false}
                 isBounded={false}
-                draggableCancel="button,a,input"
+                draggableCancel="button,a,input,textarea"
                 resizeHandles={["se"]}
-                onDragStop={saveLayout}
+                onDrag={(_layout, _old, item, _placeholder, event) => {
+                  const moved = desktop.tiles.find((t) => t.id === item.i);
+                  if (!moved || !tileToFolderChild(moved))
+                    return clearFolderHover();
+                  const pointer =
+                    "touches" in event
+                      ? (event as unknown as TouchEvent).touches[0]
+                      : event;
+                  if (!pointer) return clearFolderHover();
+                  const target = desktop.tiles.find((t) => {
+                    if (
+                      t.type !== "folder" ||
+                      (t.config.children ?? []).length >= 24
+                    )
+                      return false;
+                    const rect = document
+                      .getElementById(`tile-${t.id}`)
+                      ?.getBoundingClientRect();
+                    return (
+                      rect &&
+                      pointer.clientX >= rect.left &&
+                      pointer.clientX <= rect.right &&
+                      pointer.clientY >= rect.top &&
+                      pointer.clientY <= rect.bottom
+                    );
+                  });
+                  if (target?.id === folderHover.current?.id) return;
+                  clearFolderHover();
+                  if (target)
+                    folderHover.current = {
+                      id: target.id,
+                      ready: false,
+                      timer: setTimeout(() => {
+                        if (folderHover.current?.id !== target.id) return;
+                        folderHover.current.ready = true;
+                        setFolderTarget(target.id);
+                      }, 650),
+                    };
+                }}
+                onDragStop={(layout, old, item) => {
+                  const target = folderHover.current;
+                  clearFolderHover();
+                  if (target?.ready) {
+                    moveIntoFolder(target.id, item.i);
+                    setSelected(null);
+                  } else saveLayout(layout, old, item);
+                }}
                 onResizeStop={saveLayout}
               >
                 {desktop.tiles.map(renderTile)}

@@ -13,8 +13,8 @@ export const tileTypes = [
 ] as const;
 export type TileType = (typeof tileTypes)[number];
 export const tileSizeLimits: Record<TileType, { w: number; h: number }> = {
-  text: { w: 3, h: 3 },
-  data: { w: 3, h: 3 },
+  text: { w: 3, h: 128 },
+  data: { w: 3, h: 128 },
   link: { w: 2, h: 2 },
   image: { w: 2, h: 2 },
   clock: { w: 2, h: 2 },
@@ -205,7 +205,7 @@ export const tileSchema = z.object({
   x: z.number().int().min(0).max(11),
   y: z.number().int().min(0).max(127),
   w: z.number().int().min(1).max(3),
-  h: z.number().int().min(1).max(3),
+  h: z.number().int().min(1).max(128),
   appearance: appearanceSchema,
   config: tileConfigSchema,
   url: z

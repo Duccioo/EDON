@@ -78,7 +78,7 @@ export const tileTypeDocs = [
     type: "text",
     description: "Nota di testo. Il contenuto è in config.body (max 10000).",
     fields: ["title", "subtitle", "config.body", "url"],
-    sizes: "1×1 … 3×3",
+    sizes: "larghezza 1–3, altezza 1–128 (entro le righe del desktop)",
   },
   {
     type: "data",
@@ -93,7 +93,7 @@ export const tileTypeDocs = [
       "config.image",
       "url",
     ],
-    sizes: "1×1 … 3×3",
+    sizes: "larghezza 1–3, altezza 1–128 (entro le righe del desktop)",
   },
   {
     type: "link",
@@ -198,12 +198,6 @@ function applyFields(
       );
     next.w = input.w ?? tile.w;
     next.h = input.h ?? tile.h;
-    if (
-      next.x + next.w > grid.columns ||
-      next.y + next.h > grid.rows ||
-      others.some((o) => overlaps(o, next))
-    )
-      throw new TileError(409, "Non c'è spazio per le nuove dimensioni.");
   }
   next.updatedAt = new Date().toISOString();
   if (!tileSizeAllowed(next))
@@ -211,6 +205,13 @@ function applyFields(
       400,
       `Dimensione massima per ${next.type}: ${tileSizeLimits[next.type].w} × ${tileSizeLimits[next.type].h}.`,
     );
+  if (
+    (input.w !== undefined || input.h !== undefined) &&
+    (next.x + next.w > grid.columns ||
+      next.y + next.h > grid.rows ||
+      others.some((o) => overlaps(o, next)))
+  )
+    throw new TileError(409, "Non c'è spazio per le nuove dimensioni.");
   const parsed = tileSchema.safeParse(next);
   if (!parsed.success)
     throw new TileError(

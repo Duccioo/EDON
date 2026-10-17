@@ -24,7 +24,7 @@ curl -b /tmp/edon-cookie http://127.0.0.1:3001/api/desktop
 
 `PUT /api/desktop` richiede `{ settings, tiles, revision }`. La revisione deve essere quella restituita dall'ultima lettura; un salvataggio valido la incrementa. `409` segnala un conflitto e richiede una nuova lettura; non sovrascrivere automaticamente le modifiche dell'altra finestra. La struttura completa è definita in `packages/shared/model.ts`.
 
-I campi sono validati sul server, inclusi dimensioni, limiti, duplicati e sovrapposizioni. Note (`text`), TODO (`data`) e file (`file`) arrivano a 3×3; gli altri tipi a 2×2. Il documento desktop include `archive` (massimo 1.000 note/TODO), preservato da salvataggi e backup; gli ID devono essere unici anche tra desktop e archivio. URL di destinazione ammessi: HTTP, HTTPS e Obsidian. Immagini remote: HTTPS; quelle caricate vengono servite dal server. Errori di validazione: `400`, accesso mancante: `401`, origine non consentita: `403`, file oltre il limite: `413`.
+I campi sono validati sul server, inclusi dimensioni, limiti, duplicati e sovrapposizioni. Note (`text`) e TODO (`data`) arrivano a 3 colonne e 128 righe, entro le dimensioni del desktop; i file (`file`) arrivano a 3×3; gli altri tipi a 2×2. Il documento desktop include `archive` (massimo 1.000 note/TODO), preservato da salvataggi e backup; gli ID devono essere unici anche tra desktop e archivio. URL di destinazione ammessi: HTTP, HTTPS e Obsidian. Immagini remote: HTTPS; quelle caricate vengono servite dal server. Errori di validazione: `400`, accesso mancante: `401`, origine non consentita: `403`, file oltre il limite: `413`.
 
 
 ## API per agenti

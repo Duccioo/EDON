@@ -138,118 +138,74 @@ function asciiPainter(
   speed: number,
   center: Center,
 ): Painter {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(width * dpr);
-  canvas.height = Math.floor(height * dpr);
-  const ctx = canvas.getContext("2d")!;
-  const ink = isDark(hex(background)) ? "244,245,239" : "20,24,18";
-  const cell = 13;
-  const inner = 70; // radius of the dithered sun at the centre
-  const pitch = 56; // one text ring plus one shading band
-  const first = center();
+  const origin = center();
   const reach =
-    Math.hypot(
-      Math.max(first.x, width - first.x),
-      Math.max(first.y, height - first.y),
-    ) + pitch;
-  const bands = Math.ceil((reach - inner) / pitch);
-  const family = '"Space Grotesk Variable", "Helvetica Neue", sans-serif';
-  // Letter slots are laid out once per ring, then stretched to close the loop exactly.
-  const rings: { r: number; size: number; slots: [string, number][] }[] = [];
-  for (let b = 0; b < bands; b += 2) {
-    const r = inner + b * pitch + pitch / 2;
-    const size = Math.round(Math.min(30, 14 + r * 0.011));
-    ctx.font = `600 ${size}px ${family}`;
-    const unit = [...phrase].map(
-      (ch) => ctx.measureText(ch).width + size * 0.12,
-    );
-    const phraseWidth = unit.reduce((a, b) => a + b, 0);
-    const copies = Math.max(1, Math.round((Math.PI * 2 * r) / phraseWidth));
-    const total = copies * phraseWidth;
-    const slots: [string, number][] = [];
-    let at = 0;
-    for (let c = 0; c < copies; c++)
-      [...phrase].forEach((ch, i) => {
-        slots.push([ch, ((at + unit[i] / 2) / total) * Math.PI * 2]);
-        at += unit[i];
-      });
-    rings.push({ r, size, slots });
-  }
-  const shades = Array.from(
-    { length: 9 },
-    (_, i) => `rgba(${ink},${(0.05 + i * 0.03).toFixed(2)})`,
-  );
+    Math.ceil(
+      Math.hypot(
+        Math.max(origin.x, width - origin.x),
+        Math.max(origin.y, height - origin.y),
+      ),
+    ) + 80;
+  // Cache the entire disc once; each frame only composites one rotated bitmap.
+  const disc = document.createElement("canvas");
+  const scale = Math.min(1, 2048 / (reach * 2));
+  disc.width = disc.height = Math.ceil(reach * 2 * scale);
+  const ctx = disc.getContext("2d")!;
+  ctx.scale(scale, scale);
+  ctx.translate(reach, reach);
+  const ink = isDark(hex(background)) ? "244,245,239" : "20,24,18";
   const tau = Math.PI * 2;
-  return (time) => {
-    const { x: cx, y: cy } = center();
-    const spin = ((time * 0.001 * speed * 0.012) % 1) * tau; // the whole disc: one angle
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, width, height);
-    // thin tracks on both sides of every text ring
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let r = 98; r < reach; r += 168) {
+    const size = Math.min(28, 14 + r * 0.011);
+    ctx.font = `600 ${size}px "Space Grotesk Variable", sans-serif`;
+    const copies = Math.max(
+      1,
+      Math.floor((tau * r) / (size * phrase.length * 1.4)),
+    );
+    const letters = [...phrase.repeat(copies)];
+    ctx.fillStyle = `rgba(${ink},${0.5 - (0.3 * r) / reach})`;
+    letters.forEach((ch, i) => {
+      if (ch === " ") return;
+      const a = (i / letters.length) * tau;
+      ctx.save();
+      ctx.rotate(a);
+      ctx.translate(r, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    });
     ctx.strokeStyle = `rgba(${ink},0.09)`;
-    ctx.lineWidth = 1;
-    for (let b = 0; b < bands; b += 2)
-      for (const r of [inner + b * pitch + 4, inner + (b + 1) * pitch - 4]) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, tau);
-        ctx.stroke();
-      }
-    // dithered shading between the rings
-    ctx.font = `600 ${cell}px "SFMono-Regular", Consolas, monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const t = time * 0.001 * speed;
-    const lines = Math.ceil(height / cell);
-    const columns = Math.ceil(width / cell);
-    for (let j = 0; j < lines; j++)
-      for (let i = 0; i < columns; i++) {
-        const x = i * cell + cell / 2;
-        const y = j * cell + cell / 2;
-        const dx = x - cx;
-        const dy = y - cy;
-        const r = Math.hypot(dx, dy);
-        if (r > reach) continue;
-        const fade = 1 - 0.65 * Math.min(1, r / reach);
-        let density: number;
-        if (r < inner) {
-          density = 0.95 - (r / inner) * 0.55;
-        } else {
-          const band = Math.floor((r - inner) / pitch);
-          if (band % 2 === 0) continue; // a text ring lives here
-          const local = (r - inner) / pitch - band;
-          const turn = (Math.atan2(dy, dx) - spin) / tau;
-          const wave =
-            0.5 + 0.5 * Math.sin(turn * tau * 4 + band * 1.7 - t * 1.4);
-          density = wave * (1 - Math.abs(local - 0.5) * 0.9) * fade;
-        }
-        const level = Math.floor(
-          Math.max(0, Math.min(0.999, density)) * (ramp.length - 1) +
-            threshold(i, j),
-        );
-        if (level < 1) continue;
-        ctx.fillStyle = shades[Math.min(8, Math.round(density * 8))];
-        ctx.fillText(ramp[Math.min(ramp.length - 1, level)], x, y);
-      }
-    // the lettering, rotating with the disc
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (const { r, size, slots } of rings) {
-      ctx.font = `600 ${size}px ${family}`;
-      ctx.fillStyle = `rgba(${ink},${(0.62 - 0.4 * Math.min(1, r / reach)).toFixed(2)})`;
-      for (const [ch, angle] of slots) {
-        if (ch === " ") continue;
-        const a = angle + spin;
-        const x = cx + r * Math.cos(a);
-        const y = cy + r * Math.sin(a);
-        if (x < -40 || x > width + 40 || y < -40 || y > height + 40) continue;
-        const f = a + Math.PI / 2; // letters stand on the circle, tops pointing outward
-        const cos = Math.cos(f) * dpr;
-        const sin = Math.sin(f) * dpr;
-        ctx.setTransform(cos, sin, -sin, cos, x * dpr, y * dpr);
-        ctx.fillText(ch, 0, 0);
-      }
+    for (const radius of [r - 24, r + 24]) {
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, tau);
+      ctx.stroke();
     }
+  }
+  ctx.font = '12px "SFMono-Regular", Consolas, monospace';
+  ctx.fillStyle = `rgba(${ink},0.14)`;
+  for (let y = -reach; y < reach; y += 24)
+    for (let x = -reach; x < reach; x += 24) {
+      const r = Math.hypot(x, y);
+      if (r > reach || (r > 70 && (r - 70) % 168 < 60)) continue;
+      const density =
+        (1 - r / reach) * (0.5 + 0.5 * Math.sin(Math.atan2(y, x) * 4));
+      const level = Math.floor(
+        density * (ramp.length - 1) + threshold(x / 24, y / 24),
+      );
+      if (level > 0) ctx.fillText(ramp[level], x, y);
+    }
+  canvas.width = width;
+  canvas.height = height;
+  const output = canvas.getContext("2d")!;
+  return (time) => {
+    const { x, y } = center();
+    output.setTransform(1, 0, 0, 1, 0, 0);
+    output.clearRect(0, 0, width, height);
+    output.translate(x, y);
+    output.rotate(time * 0.001 * speed * 0.012 * tau);
+    output.drawImage(disc, -reach, -reach, reach * 2, reach * 2);
   };
 }
 
@@ -277,7 +233,7 @@ export function AnimatedWallpaper({
     const interval = kind === "noise" ? 1000 / 15 : 1000 / 24;
     const loop = (time: number) => {
       frame = requestAnimationFrame(loop);
-      if (time - last < interval) return;
+      if (document.hidden || time - last < interval) return;
       last = time;
       paint?.(time);
     };
@@ -305,7 +261,7 @@ export function AnimatedWallpaper({
         center,
       );
       paint(0);
-      if (!still) frame = requestAnimationFrame(loop);
+      if (!still && !motion.matches) frame = requestAnimationFrame(loop);
     };
     setup();
     const observer = new ResizeObserver(setup);

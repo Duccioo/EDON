@@ -41,6 +41,16 @@ async function capture(
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
 }
 test("curated desktop and mobile layout", async ({ page }) => {
+  // Use the normal composition for screenshots; the shared fixture reserves 12 rows for creation tests.
+  const initial = await (await page.request.get("/api/desktop")).json();
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: { ...initial, settings: { ...initial.settings, rows: 6 } },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await expect(
@@ -68,6 +78,14 @@ test("curated desktop and mobile layout", async ({ page }) => {
   ).toHaveCSS("position", "relative");
   await page.screenshot({ path: "test-results/mobile.png", fullPage: true });
   expect(errors).toEqual([]);
+  const saved = await (await page.request.get("/api/desktop")).json();
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: { ...saved, settings: { ...saved.settings, rows: 12 } },
+      })
+    ).ok(),
+  ).toBe(true);
 });
 test("create, style, resize and persist an ordinary clock tile", async ({
   page,
@@ -167,9 +185,16 @@ test("dragging, resizing, keyboard editing, wallpaper and deletion", async ({
     (t: { title: string }) => t.title === "Orologio di prova",
   );
   const box = (await tile.boundingBox())!;
-  await page.mouse.move(box.x + 50, box.y + 85);
+  const destination = (await page
+    .locator(".grid-guides span")
+    .nth(
+      (before.settings.rows - original.h) * before.settings.columns +
+        original.x,
+    )
+    .boundingBox())!;
+  await page.mouse.move(box.x + 30, box.y + 30);
   await page.mouse.down();
-  await page.mouse.move(box.x + 50, box.y + 85 - 380, { steps: 15 });
+  await page.mouse.move(box.x + 30, destination.y + 30, { steps: 15 });
   await page.mouse.up();
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
   const after = await (await page.request.get("/api/desktop")).json();
@@ -310,7 +335,18 @@ test("global shape applies to every tile, wallpaper persists, individual editor 
   for (const tile of await page.locator(".tile-grid article.tile").all()) {
     await expect(tile).toHaveCSS("border-radius", "30px");
     await expect(tile).toHaveCSS("border-top-width", "2px");
-    await expect(tile).toHaveCSS("padding-top", "18px");
+    await expect
+      .poll(() =>
+        tile.evaluate((el) => {
+          const density = parseFloat(
+            getComputedStyle(el.closest(".desktop")!).getPropertyValue(
+              "--tile-density",
+            ),
+          );
+          return parseFloat(getComputedStyle(el).paddingLeft) / density;
+        }),
+      )
+      .toBeCloseTo(18, 1);
   }
   const saved = await (await page.request.get("/api/desktop")).json();
   expect(saved.settings.wallpaper).toBe("solid");
@@ -824,4 +860,185 @@ test("animated wallpapers are chosen in settings", async ({ page }) => {
   await settings.getByRole("button", { name: "Chiudi", exact: true }).click();
   await expect(page.locator("canvas.wallpaper-ascii")).toBeVisible();
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+});
+
+test("hover tilts the actual tile surface", async ({ page }) => {
+  const shell = page.getByTestId("tile-clock").first();
+  const box = (await shell.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5);
+  await page.mouse.move(box.x + box.width * 0.85, box.y + box.height * 0.3, {
+    steps: 5,
+  });
+  await expect
+    .poll(() =>
+      shell.locator("article").evaluate((el) => getComputedStyle(el).transform),
+    )
+    .not.toBe("none");
+  await expect
+    .poll(() =>
+      shell
+        .locator("article")
+        .evaluate((el) => el.style.getPropertyValue("--ry")),
+    )
+    .not.toBe("");
+});
+
+test("tall notes and todos accept inline additions and keep opaque text", async ({
+  page,
+}) => {
+  const initial = await (await page.request.get("/api/desktop")).json();
+  const note = initial.tiles.find((t: { type: string }) => t.type === "text");
+  const todo = initial.tiles.find((t: { type: string }) => t.type === "data");
+  const response = await page.request.put("/api/desktop", {
+    data: {
+      ...initial,
+      settings: { ...initial.settings, columns: 8, rows: 4, opacity: 0.5 },
+      tiles: [
+        { ...note, x: 0, y: 0, w: 2, h: 4 },
+        { ...todo, x: 2, y: 0, w: 2, h: 4 },
+      ],
+    },
+  });
+  expect(response.ok()).toBe(true);
+  await page.reload();
+  const noteTile = page.getByTestId("tile-text");
+  await noteTile
+    .getByRole("button", { name: "Aggiungi testo", exact: true })
+    .click();
+  await noteTile
+    .getByRole("textbox", { name: "Testo da aggiungere" })
+    .fill("Testo inserito dal desktop");
+  await noteTile.getByRole("button", { name: "Aggiungi", exact: true }).click();
+  const todoTile = page.getByTestId("tile-data");
+  await todoTile
+    .getByRole("button", { name: "Aggiungi attività", exact: true })
+    .click();
+  await todoTile
+    .getByRole("textbox", { name: "Nuova attività" })
+    .fill("Attività dal desktop");
+  await todoTile.getByRole("button", { name: "Aggiungi", exact: true }).click();
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+  await page.reload();
+  await expect(noteTile).toContainText("Testo inserito dal desktop");
+  await expect(todoTile).toContainText("Attività dal desktop");
+  await expect(noteTile.locator("article")).toHaveCSS("opacity", "1");
+  expect(
+    await noteTile
+      .locator("article")
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).toMatch(/0\.5/);
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(page.locator(".mobile-tile-grid")).toBeVisible();
+  expect(
+    await page
+      .locator(".mobile-tile-grid")
+      .evaluate(
+        (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
+      ),
+  ).toBe(4);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page
+      .locator(".mobile-tile-grid")
+      .evaluate(
+        (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
+      ),
+  ).toBe(1);
+  await page.screenshot({
+    path: "test-results/inline-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("holding a dragged tile over a folder arms the drop and persists its contents", async ({
+  page,
+}) => {
+  const initial = await (await page.request.get("/api/desktop")).json();
+  const source = initial.tiles[0];
+  const folder = {
+    ...source,
+    id: crypto.randomUUID(),
+    type: "folder",
+    title: "Destinazione",
+    x: 4,
+    y: 0,
+    w: 2,
+    h: 2,
+    config: { ...source.config, children: [] },
+  };
+  const moved = { ...source, type: "text", x: 0, y: 0, w: 1, h: 1 };
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: {
+          ...initial,
+          settings: { ...initial.settings, columns: 8, rows: 4 },
+          tiles: [moved, folder],
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
+  await page.getByRole("button", { name: "Altre azioni" }).click();
+  await page.getByRole("button", { name: "Modifica", exact: true }).click();
+  const from = (await page.getByTestId("tile-text").boundingBox())!;
+  const target = page.getByTestId("tile-folder");
+  const to = (await target.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
+    steps: 15,
+  });
+  await expect(target).toHaveClass(/folder-drop-ready/);
+  await page.mouse.up();
+  await expect(page.getByTestId("tile-text")).toHaveCount(0);
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+  await page.reload();
+  const saved = await (await page.request.get("/api/desktop")).json();
+  expect(saved.tiles).toHaveLength(1);
+  expect(saved.tiles[0].config.children[0].id).toBe(moved.id);
+});
+
+test("circular wallpaper reuses its lettering between animation frames", async ({
+  page,
+}) => {
+  const initial = await (await page.request.get("/api/desktop")).json();
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: {
+          ...initial,
+          settings: { ...initial.settings, wallpaper: "ascii" },
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.addInitScript(() => {
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    (window as unknown as { letteringCalls: number }).letteringCalls = 0;
+    CanvasRenderingContext2D.prototype.fillText = function (
+      ...args: Parameters<typeof original>
+    ) {
+      (window as unknown as { letteringCalls: number }).letteringCalls++;
+      return original.apply(this, args);
+    };
+  });
+  await page.reload();
+  await expect(page.locator("canvas.wallpaper-ascii")).toBeVisible();
+  const counts = await page.evaluate(async () => {
+    const frames = async (n: number) => {
+      for (let i = 0; i < n; i++) await new Promise(requestAnimationFrame);
+    };
+    await frames(4);
+    const before = (window as unknown as { letteringCalls: number })
+      .letteringCalls;
+    await frames(12);
+    return {
+      before,
+      after: (window as unknown as { letteringCalls: number }).letteringCalls,
+    };
+  });
+  expect(counts.before).toBeGreaterThan(0);
+  expect(counts.after).toBe(counts.before);
+  await page.screenshot({ path: "test-results/circular-wallpaper.png" });
 });

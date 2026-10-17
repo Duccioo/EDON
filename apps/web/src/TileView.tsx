@@ -21,13 +21,10 @@ export function tileStyle(
   const a = tile.appearance;
   return {
     "--check-ink": a.background,
-    backgroundColor: settings.blur
-      ? `color-mix(in srgb, ${a.background} 78%, transparent)`
-      : a.background,
+    backgroundColor: `color-mix(in srgb, ${a.background} ${settings.opacity * (settings.blur ? 78 : 100)}%, transparent)`,
     color: readableInk(a.background),
     borderRadius: settings.radius,
     padding: settings.padding,
-    opacity: settings.opacity,
     border:
       settings.border === "none"
         ? "1px solid transparent"
@@ -403,5 +400,95 @@ function TodoList({
         </form>
       )}
     </>
+  );
+}
+
+export function QuickAppend({
+  tile,
+  onConfig,
+}: {
+  tile: Tile;
+  onConfig: (patch: Partial<Tile["config"]>) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  useEffect(() => {
+    const article = ref.current?.closest("article");
+    if (!article) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setRoom(
+        entry.contentRect.height >= 210 && entry.contentRect.width >= 150,
+      ),
+    );
+    observer.observe(article);
+    return () => observer.disconnect();
+  }, []);
+  const todo = tile.type === "data";
+  const full = todo
+    ? tile.config.items.length >= 30
+    : tile.config.body.length >= 10000;
+  return (
+    <div ref={ref} className="quick-append" hidden={!room}>
+      {open ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const text = draft.trim();
+            if (!text || full) return;
+            if (todo)
+              onConfig({
+                items: [
+                  ...tile.config.items,
+                  { id: crypto.randomUUID(), text, done: false },
+                ],
+              });
+            else {
+              const body = [tile.config.body, text]
+                .filter(Boolean)
+                .join("\n\n");
+              if (body.length > 10000) return;
+              onConfig({ body });
+            }
+            setDraft("");
+            setOpen(false);
+          }}
+        >
+          <textarea
+            autoFocus
+            aria-label={todo ? "Nuova attività" : "Testo da aggiungere"}
+            maxLength={
+              todo
+                ? 300
+                : Math.max(
+                    0,
+                    10000 -
+                      tile.config.body.length -
+                      (tile.config.body ? 2 : 0),
+                  )
+            }
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setOpen(false);
+              }
+            }}
+          />
+          <div>
+            <button type="button" onClick={() => setOpen(false)}>
+              Annulla
+            </button>
+            <button disabled={!draft.trim() || full}>Aggiungi</button>
+          </div>
+        </form>
+      ) : (
+        <button disabled={full} onClick={() => setOpen(true)}>
+          <Plus size={14} /> {todo ? "Aggiungi attività" : "Aggiungi testo"}
+        </button>
+      )}
+    </div>
   );
 }

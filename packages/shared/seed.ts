@@ -34,7 +34,7 @@ export function seedDesktop(): Desktop {
       name: "Il mio spazio",
       gap: 14,
       maxTiles: 24,
-      columns: 6,
+      columns: 8,
       rows: 6,
       wallpaper: "fold",
       background: "#d7d8d5",

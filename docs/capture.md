@@ -6,7 +6,7 @@ Revisione del 17 ottobre 2026. Il flusso principale è scrivere e salvare senza 
 - Conversione in TODO dalle righe `- [ ]` / `- [x]`, conservando contesto, immagini e blocchi di codice. Un primo titolo Markdown può diventare il titolo della tile.
 - Immagini e GIF tramite allegato, incolla o trascinamento. Rendering Markdown senza HTML incorporato; URL di immagini e collegamenti filtrati.
 - Archiviazione rapida su note/TODO e nella vista completa. Lettura e ripristino da **+ → Archivio**; contenuto incluso nei salvataggi e nei backup. Ripristino rifiutato, senza perdita di dati, se manca spazio o si supera il limite.
-- Note e TODO fino a 3×3, gli altri tipi fino a 2×2, con validazione anche nel modello condiviso e nelle API.
+- Note e TODO fino a 3 colonne e tutte le righe disponibili, gli altri tipi fino a 2×2, con validazione anche nel modello condiviso e nelle API.
 - Celle libere sempre visibili in modo leggero. Il desktop riserva lo spazio reale occupato dalla barra mentre cresce.
 - Creazione AI in **Aggiungi tile → Crea con agenti AI**. Se manca la configurazione, viene offerto il collegamento alle impostazioni.
 

@@ -47,11 +47,13 @@ export function GlobalSettings({
                 value={settings.columns}
                 onChange={(e) => patch({ columns: +e.target.value })}
               >
-                {Array.from({ length: 11 }, (_, i) => i + 2).map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
+                {[...new Set([4, 8, 12, settings.columns])]
+                  .sort((a, b) => a - b)
+                  .map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
               </select>
             </label>
             <label>
@@ -180,7 +182,8 @@ export function GlobalSettings({
             />
           </label>
           <label>
-            Opacità <span>{Math.round(settings.opacity * 100)}%</span>
+            Opacità dello sfondo tile{" "}
+            <span>{Math.round(settings.opacity * 100)}%</span>
             <input
               type="range"
               min={25}

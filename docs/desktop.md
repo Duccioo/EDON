@@ -16,7 +16,7 @@ Il desktop ha due modi:
 
 Regole di disposizione:
 
-- Griglia con colonne e righe configurabili separatamente in Aspetto; note e TODO fino a 3×3; collegamenti, immagini, orologi e cartelle fino a 2×2. Tutte le combinazioni intermedie sono disponibili. Le celle non usate restano visibili in modo leggero.
+- Griglia con colonne e righe configurabili separatamente in Aspetto; note e TODO fino a 3 colonne e tutte le righe disponibili; collegamenti, immagini, orologi e cartelle fino a 2×2. Tutte le combinazioni intermedie sono disponibili. Le celle non usate restano visibili in modo leggero.
 - Su desktop da 900×600 px usa tutta la larghezza e l’altezza disponibili tra intestazione e dock. Le celle possono essere rettangolari: tutte le tile restano visibili senza scorrere.
 - Limite iniziale di 24 tile, modificabile in Impostazioni → Aspetto. Vale anche per duplicazioni e agenti; non si possono rimuovere tile implicitamente abbassandolo.
 - Le tile vicine **restano ferme**: trascinando sopra una tile occupata, due
@@ -127,3 +127,9 @@ l'import è solo in Impostazioni → Dati e backup.
 - Nessun JavaScript personalizzato nelle tile. Il Markdown di note e TODO ignora HTML incorporato e collegamenti non sicuri.
 - Le chiavi Hermes salvate dall'interfaccia stanno in chiaro nel database,
   come il resto della configurazione.
+
+- Le nuove griglie partono da 8 colonne; in Aspetto si scelgono 4, 8 o 12 colonne. I layout precedenti mantengono il numero di colonne salvato. La vista intermedia dispone i tile su quattro colonne; sotto 600 px diventa una lista, senza cambiare le coordinate salvate.
+- L’opacità regola il solo colore di sfondo dei tile: testo e pulsanti restano leggibili.
+- In modifica, sostare per 650 ms con un tile sopra una cartella la ingrandisce: rilasciando il tile viene inserito nella cartella. Cartelle piene e tipi non supportati non vengono attivati.
+- Note e TODO mostrano “Aggiungi testo” o “Aggiungi attività” quando il tile offre spazio sufficiente. Il contenuto viene aggiunto in coda senza aprire la vista completa.
+- Lo sfondo circolare conserva il disegno in un canvas di massimo 2048 × 2048 pixel e lo ruota senza ridisegnare i caratteri a ogni frame. L’animazione resta ferma con movimento ridotto e sospende il disegno nelle schede nascoste.
