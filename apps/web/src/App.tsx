@@ -1484,7 +1484,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         archiveCount={desktop.archive.length}
         onVault={() => openVaultSide("", "")}
         vaultConfigured={Boolean(vaultStatus?.configured)}
-        vaultCount={vaultStatus?.notesCount ?? 0}
+        vaultCount={vaultStatus?.noteCount ?? 0}
         onShortcuts={() => setDialog("shortcuts")}
         onSaveCapture={saveCapture}
         onHeightChange={setDockHeight}
@@ -1492,6 +1492,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       {tile && editing && (
         <Inspector
           tile={tile}
+          canDuplicate={!atCapacity}
           onChange={setTile}
           onOpenFolder={
             tile.type === "folder"

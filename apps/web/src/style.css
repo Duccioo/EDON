@@ -4326,21 +4326,21 @@ dialog.settings-page::backdrop {
 @keyframes edon-side-right-in {
   0% {
     opacity: 0;
-    transform: translateX(48px) scale(0.97);
+    transform: translateX(32px);
   }
   100% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
   }
 }
 @keyframes edon-side-left-in {
   0% {
     opacity: 0;
-    transform: translateX(-48px) scale(0.97);
+    transform: translateX(-32px);
   }
   100% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
   }
 }
 @keyframes edon-menu-pop {

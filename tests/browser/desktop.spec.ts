@@ -908,7 +908,7 @@ test("tall notes and todos accept inline additions and keep opaque text", async 
   await noteTile
     .getByRole("textbox", { name: "Testo da aggiungere" })
     .fill("Testo inserito dal desktop");
-  await noteTile.getByRole("button", { name: "Aggiungi", exact: true }).click();
+  await noteTile.getByRole("button", { name: "Salva nota" }).click();
   const todoTile = page.getByTestId("tile-data");
   await todoTile
     .getByRole("button", { name: "Aggiungi attività", exact: true })
@@ -916,7 +916,7 @@ test("tall notes and todos accept inline additions and keep opaque text", async 
   await todoTile
     .getByRole("textbox", { name: "Nuova attività" })
     .fill("Attività dal desktop");
-  await todoTile.getByRole("button", { name: "Aggiungi", exact: true }).click();
+  await todoTile.getByRole("button", { name: "Salva nota" }).click();
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
   await page.reload();
   await expect(noteTile).toContainText("Testo inserito dal desktop");
@@ -1043,10 +1043,9 @@ test("circular wallpaper reuses its lettering between animation frames", async (
   await page.screenshot({ path: "test-results/circular-wallpaper.png" });
 });
 
-test("performance, AI limits, DJ Osso Radio tiles, quick keybindings, double-click note edit with Enter markdown, and non-overlapping capture bar", async ({
+test("performance, AI limits, DJ Osso Radio tiles, inline live-Markdown note editing, flush resizable side page with color swatches, type-anywhere capture without desktop shrink, 3D parallax, and hover wheel scroll", async ({
   page,
 }) => {
-  // Expand grid to 8x5 so there is plenty of space for all new tiles
   const initial = await (await page.request.get("/api/desktop")).json();
   expect(
     (
@@ -1066,65 +1065,91 @@ test("performance, AI limits, DJ Osso Radio tiles, quick keybindings, double-cli
     name: "Scorciatoie da tastiera",
   });
   await expect(shortcutsModal).toBeVisible();
-  await expect(shortcutsModal.getByText("Nuova nota Markdown")).toBeVisible();
   await shortcutsModal.getByRole("button", { name: "Chiudi" }).click();
 
-  // 2. Add Performance, Subscription AI limits, and DJ Osso Radio tiles via "a" shortcut
-  await page.keyboard.press("a");
+  // 2. Add Performance, Subscription AI limits, and DJ Osso Radio tiles via "+" shortcut
+  await page.keyboard.press("+");
   await page.getByRole("button", { name: /Prestazioni/ }).click();
   await expect(page.getByTestId("tile-performance")).toBeVisible();
   await expect(page.getByTestId("tile-performance")).toContainText(/CPU/);
-  await expect(page.getByTestId("tile-performance")).toContainText(/RAM/);
   await page.getByRole("button", { name: "Fine", exact: true }).click();
 
-  await page.keyboard.press("a");
+  await page.keyboard.press("+");
   await page.getByRole("button", { name: /Subscription AI limits/ }).click();
   const aiTile = page.getByTestId("tile-ai_limits");
   await expect(aiTile).toBeVisible();
   await expect(aiTile).toContainText("Claude Max");
   await page.getByRole("button", { name: "Fine", exact: true }).click();
-  // Clicking a quota row in normal mode increments its percentage
   await aiTile.getByRole("button", { name: /Aggiorna quota Claude Max/ }).click();
   await expect(aiTile).toContainText("75%");
 
-  await page.keyboard.press("a");
+  await page.keyboard.press("+");
   await page.getByRole("button", { name: /DJ Osso Radio/ }).click();
   const radioTile = page.getByTestId("tile-radio");
   await expect(radioTile).toBeVisible();
   await expect(radioTile).toContainText("DJ Osso Radio");
   await page.getByRole("button", { name: "Fine", exact: true }).click();
-  await expect(
-    radioTile.getByRole("button", { name: "Ascolta DJ Osso Radio" }),
-  ).toBeVisible();
 
-  // 3. Double-click on a note tile opens the Note Editor directly in SideWorkspace,
-  //    renders Markdown on Enter, and does not overlap the capture bar or "+" button
-  await capture(page, "Nota doppio clic", "Prima riga");
-  const noteTile = page
-    .getByTestId("tile-text")
-    .filter({ hasText: "Nota doppio clic" });
-  await noteTile.locator("article").dblclick();
-  const sideDialog = page.getByRole("dialog", { name: "Modifica" });
+  // 3. Type-anywhere on desktop: typing directly on the keyboard focuses capture bar,
+  //    lets user choose Nota or Todo, and multi-line text does NOT shrink desktop-main
+  const mainHeightBefore = (await page.locator(".desktop-main").boundingBox())!.height;
+  await page.keyboard.type("Idea veloce dal desktop");
+  const captureInput = page.getByRole("textbox", { name: "Appunta qualcosa" });
+  await expect(captureInput).toHaveValue("Idea veloce dal desktop");
+  await expect(page.getByRole("group", { name: "Scegli cosa aggiungere" })).toBeVisible();
+  await captureInput.fill(Array.from({ length: 10 }, (_, i) => `Riga molto lunga numero ${i + 1}`).join("\n"));
+  const mainHeightDuring = (await page.locator(".desktop-main").boundingBox())!.height;
+  expect(mainHeightDuring).toBe(mainHeightBefore);
+  await page.getByRole("button", { name: "Salva nota" }).click();
+
+  // 4. Long text tile on the desktop scrolls with mouse wheel on hover without opening it
+  const longNoteTile = page.getByTestId("tile-text").filter({ hasText: "Riga molto lunga numero 1" });
+  await expect(longNoteTile).toBeVisible();
+  const textBody = longNoteTile.locator(".text-body");
+  const scrollMetrics = await textBody.evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+
+  // 5. 3D Parallax on tile hover sets --rx, --ry, --px, --py, --tilt
+  const tileBox = (await longNoteTile.boundingBox())!;
+  await page.mouse.move(tileBox.x + tileBox.width * 0.85, tileBox.y + tileBox.height * 0.2);
+  const tiltVal = await longNoteTile.locator("article").evaluate((el) => el.style.getPropertyValue("--tilt"));
+  expect(tiltVal).toBe("1");
+
+  // 6. Inline note editing directly on tile and in flush, resizable SideWorkspace with top color picker
+  await longNoteTile.getByRole("button", { name: /Apri Riga molto lunga/ }).click();
+  const sideDialog = page.getByRole("dialog", { name: "Vista completa" });
   await expect(sideDialog).toBeVisible();
 
-  const mdInput = sideDialog.getByRole("textbox", {
-    name: "Contenuto Markdown",
-  });
-  await mdInput.fill("# Titolo Live\nSeconda riga in corso");
-  const liveRender = sideDialog.getByLabel(
-    "Rendering Markdown in tempo reale",
-  );
-  await expect(liveRender).toBeVisible();
-  await expect(liveRender.locator("h1")).toHaveText("Titolo Live");
+  // Outer edge is flush with the window (top === 0 and right === window.innerWidth)
+  const sideBoxBefore = (await sideDialog.boundingBox())!;
+  const viewportSize = page.viewportSize()!;
+  expect(sideBoxBefore.y).toBe(0);
+  await expect.poll(async () => { const b = (await sideDialog.boundingBox())!; return Math.round(b.x + b.width); }).toBe(viewportSize.width);
 
-  // Verify the capture bar ("Appunta qualcosa") and "+" button ("Altre azioni") do not overlap each other or the side editor
-  const plusBox = (await page
-    .getByRole("button", { name: "Altre azioni" })
-    .boundingBox())!;
-  const captureBox = (await page
-    .locator(".capture-tools .capture-bar")
-    .boundingBox())!;
-  const sideBox = (await sideDialog.boundingBox())!;
-  expect(plusBox.x + plusBox.width).toBeLessThanOrEqual(captureBox.x + 2);
-  expect(captureBox.x + captureBox.width).toBeLessThanOrEqual(sideBox.x + 2);
+  // Inner edge is resizable via the separator handle
+  const resizeHandle = sideDialog.getByRole("separator", { name: "Ridimensiona pannello laterale" });
+  await resizeHandle.focus();
+  await page.keyboard.press("ArrowLeft");
+  const sideBoxAfter = (await sideDialog.boundingBox())!;
+  expect(sideBoxAfter.width).toBeGreaterThan(sideBoxBefore.width);
+
+  // Top color picker changes the tile background directly without opening settings
+  const colorGroup = sideDialog.getByRole("group", { name: "Colore sfondo tile" });
+  await expect(colorGroup).toBeVisible();
+  await colorGroup.locator("button").nth(3).click();
+  await expect(colorGroup.locator("button").nth(3)).toHaveAttribute("aria-pressed", "true");
+
+  // Inline live-Markdown editor: renders Markdown only after pressing Enter, and can toggle to plain text mode
+  const lineInput = sideDialog.getByRole("textbox", { name: "Scrivi una riga Markdown" });
+  await lineInput.fill("# Titolo Inline");
+  await expect(sideDialog.locator(".inline-note-markdown h1")).toHaveCount(0);
+  await lineInput.press("Enter");
+  await expect(sideDialog.locator(".inline-note-markdown h1")).toHaveText("Titolo Inline");
+
+  const modeBtn = sideDialog.getByRole("button", { name: "Modalità testo normale" });
+  await modeBtn.click();
+  await expect(sideDialog.getByRole("textbox", { name: "Contenuto nota in testo normale" })).toBeVisible();
 });
