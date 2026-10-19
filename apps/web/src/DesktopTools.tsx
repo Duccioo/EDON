@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Archive,
+  BookOpen,
   Check,
+  Keyboard,
   LayoutGrid,
   Minimize2,
   Pencil,
@@ -19,6 +21,10 @@ export function DesktopTools({
   onCompact,
   onArchive,
   archiveCount,
+  onVault,
+  vaultConfigured,
+  vaultCount,
+  onShortcuts,
   onSaveCapture,
   onHeightChange,
 }: {
@@ -29,6 +35,10 @@ export function DesktopTools({
   onCompact: () => void;
   onArchive: () => void;
   archiveCount: number;
+  onVault: () => void;
+  vaultConfigured: boolean;
+  vaultCount: number;
+  onShortcuts: () => void;
   onSaveCapture: (capture: Capture) => void;
   onHeightChange: (height: number) => void;
 }) {
@@ -54,7 +64,7 @@ export function DesktopTools({
             <button
               onClick={onCompact}
               aria-label="Compatta tile"
-              title="Compatta tile"
+              title="Compatta tile (C)"
             >
               <Minimize2 size={18} />
             </button>
@@ -62,7 +72,7 @@ export function DesktopTools({
               onClick={onEdit}
               className="tool-active"
               aria-label="Fine"
-              title="Fine"
+              title="Fine (E / Esc)"
             >
               <Check size={20} />
             </button>
@@ -107,12 +117,38 @@ export function DesktopTools({
               <button
                 onClick={() => {
                   setMore(false);
-                  onArchive();
+                  onVault();
                 }}
-                aria-label="Archivio"
+                aria-label="Esplora Vault"
               >
-                <Archive size={18} />
-                <span>Archivio{archiveCount ? ` (${archiveCount})` : ""}</span>
+                <BookOpen size={18} />
+                <span>
+                  Esplora Vault{vaultConfigured ? ` (${vaultCount})` : ""}
+                </span>
+              </button>
+              {!vaultConfigured && (
+                <button
+                  onClick={() => {
+                    setMore(false);
+                    onArchive();
+                  }}
+                  aria-label="Archivio"
+                >
+                  <Archive size={18} />
+                  <span>
+                    Archivio{archiveCount ? ` (${archiveCount})` : ""}
+                  </span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setMore(false);
+                  onShortcuts();
+                }}
+                aria-label="Scorciatoie da tastiera"
+              >
+                <Keyboard size={18} />
+                <span>Scorciatoie (?)</span>
               </button>
               <button
                 onClick={() => {

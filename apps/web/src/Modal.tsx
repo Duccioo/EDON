@@ -1,5 +1,5 @@
 import { useEffect, useRef, useId, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { PanelLeft, PanelRight, X } from "lucide-react";
 export function Modal({
   title,
   onClose,
@@ -98,5 +98,89 @@ export function Modal({
       </div>
       {children}
     </dialog>
+  );
+}
+
+export function SideWorkspace({
+  title,
+  side,
+  onSideChange,
+  onClose,
+  wide = false,
+  className = "",
+  children,
+}: {
+  title: string;
+  side: "left" | "right";
+  onSideChange: (side: "left" | "right") => void;
+  onClose: () => void;
+  wide?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  const ref = useRef<HTMLElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    ref.current
+      ?.querySelector<HTMLElement>(".capture-editor textarea")
+      ?.focus();
+  }, [title]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector("dialog[open]")) return;
+      e.preventDefault();
+      closeRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <aside
+      ref={ref}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={titleId}
+      className={`side-workspace side-${side} ${wide ? "side-wide" : ""} ${className}`}
+    >
+      <div className="panel-heading side-workspace-heading">
+        <h2 id={titleId}>{title}</h2>
+        <div className="side-workspace-controls">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={
+              side === "right" ? "Mostra a sinistra" : "Mostra a destra"
+            }
+            title={
+              side === "right"
+                ? "Mostra il documento a sinistra"
+                : "Mostra il documento a destra"
+            }
+            onClick={() => onSideChange(side === "right" ? "left" : "right")}
+          >
+            {side === "right" ? (
+              <PanelLeft size={18} />
+            ) : (
+              <PanelRight size={18} />
+            )}
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Chiudi"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      </div>
+      {children}
+    </aside>
   );
 }

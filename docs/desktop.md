@@ -39,14 +39,14 @@ Regole di disposizione:
 
 ## Le tile
 
-| Tipo | Contenuto | Dettagli |
-| --- | --- | --- |
-| Collegamento | Titolo, icona, URL | `https://`, `http://`, `obsidian://`. Apre una nuova scheda (gli URI `obsidian://` usano l'app associata). |
-| Immagine | PNG, JPEG, WebP, GIF | File caricati (max 10 MB) o URL HTTPS. Riempi/contieni, didascalia opzionale. |
-| Testo | Nota Markdown | Anteprima nel desktop, vista completa con un clic, scorrevole per i testi lunghi. |
-| Elenco | Testo + voci spuntabili | Righe `- [ ]` / `- [x]` nell’editor Markdown. Le spunte funzionano anche in anteprima. |
-| Orologio | Ora e data | Fuso IANA (`Europe/Rome`, `Asia/Tokyo`); vuoto = ora del dispositivo. |
-| Cartella | Fino a 24 mini-tile | Si apre in una vista dedicata; vedi sotto. |
+| Tipo         | Contenuto               | Dettagli                                                                                                   |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Collegamento | Titolo, icona, URL      | `https://`, `http://`, `obsidian://`. Apre una nuova scheda (gli URI `obsidian://` usano l'app associata). |
+| Immagine     | PNG, JPEG, WebP, GIF    | File caricati (max 10 MB) o URL HTTPS. Riempi/contieni, didascalia opzionale.                              |
+| Testo        | Nota Markdown           | Anteprima nel desktop, vista completa con un clic, scorrevole per i testi lunghi.                          |
+| Elenco       | Testo + voci spuntabili | Righe `- [ ]` / `- [x]` nell’editor Markdown. Le spunte funzionano anche in anteprima.                     |
+| Orologio     | Ora e data              | Fuso IANA (`Europe/Rome`, `Asia/Tokyo`); vuoto = ora del dispositivo.                                      |
+| Cartella     | Fino a 24 mini-tile     | Si apre in una vista dedicata; vedi sotto.                                                                 |
 
 Ogni tile ha titolo, sottotitolo, colori, tipografia e immagine di sfondo
 propri (ispettore → Aspetto, preset Minimal / Dot / Industrial / Soft Glass).

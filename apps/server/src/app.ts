@@ -3,7 +3,9 @@ import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import staticFiles from "@fastify/static";
+import { statfsSync } from "node:fs";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
+import os from "node:os";
 import { resolve } from "node:path";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { z, ZodError } from "zod";
@@ -20,10 +22,86 @@ import {
 import { registerMcp } from "./mcp";
 import { WeatherError, WeatherService } from "./weather";
 import { AgentClient, agentSettingsInput, type AgentEnv } from "./agent";
+import { VaultService, vaultSettingsInput, type VaultEnv } from "./vault";
+
+function sampleCpuTimes() {
+  let idle = 0;
+  let total = 0;
+  for (const cpu of os.cpus()) {
+    idle += cpu.times.idle;
+    total +=
+      cpu.times.user +
+      cpu.times.nice +
+      cpu.times.sys +
+      cpu.times.irq +
+      cpu.times.idle;
+  }
+  return { idle, total };
+}
+
+let lastCpuSample = sampleCpuTimes();
+
+function readPerformance(dataDir: string) {
+  const current = sampleCpuTimes();
+  const idleDelta = current.idle - lastCpuSample.idle;
+  const totalDelta = current.total - lastCpuSample.total;
+  lastCpuSample = current;
+  const cores = Math.max(1, os.cpus().length);
+  const loadAvg = os.loadavg();
+  const cpuPercent =
+    totalDelta > 0
+      ? Math.max(
+          0,
+          Math.min(100, Math.round((1 - idleDelta / totalDelta) * 100)),
+        )
+      : Math.max(0, Math.min(100, Math.round((loadAvg[0] / cores) * 100)));
+  const memTotalBytes = os.totalmem();
+  const memFreeBytes = os.freemem();
+  const memUsedBytes = Math.max(0, memTotalBytes - memFreeBytes);
+  const memPercent =
+    memTotalBytes > 0 ? Math.round((memUsedBytes / memTotalBytes) * 100) : 0;
+
+  let diskTotalBytes = 0;
+  let diskUsedBytes = 0;
+  let diskPercent = 0;
+  try {
+    const stat = statfsSync(dataDir);
+    diskTotalBytes = stat.blocks * stat.bsize;
+    const availBytes = stat.bavail * stat.bsize;
+    diskUsedBytes = Math.max(0, diskTotalBytes - availBytes);
+    diskPercent =
+      diskTotalBytes > 0
+        ? Math.round((diskUsedBytes / diskTotalBytes) * 100)
+        : 0;
+  } catch {
+    /* ignore statfs errors on unsupported filesystems */
+  }
+
+  return {
+    cpuPercent,
+    cores,
+    memUsedBytes,
+    memTotalBytes,
+    memPercent,
+    diskUsedBytes,
+    diskTotalBytes,
+    diskPercent,
+    loadAvg: loadAvg.map((v) => Number(v.toFixed(2))) as [
+      number,
+      number,
+      number,
+    ],
+    uptimeSeconds: Math.floor(os.uptime()),
+    hostname: os.hostname(),
+    platform: os.platform(),
+    arch: os.arch(),
+  };
+}
 
 const agentPath = (pathname: string) =>
-  /^\/api\/(tiles|tile-types|layout)(\/|$)/.test(pathname) ||
-  pathname === "/mcp";
+  /^\/api\/(tiles|tile-types|layout|vault\/notes|vault\/note|performance|ai-limits)(\/|$)/.test(
+    pathname,
+  ) || pathname === "/mcp";
 const bearer = (header: string | undefined) =>
   /^Bearer (\S+)$/i.exec(header ?? "")?.[1];
 
@@ -69,11 +147,14 @@ export async function buildApp(options: {
   agentToken?: string;
   /** Hermes connection from the environment; overrides the saved settings. */
   agent?: AgentEnv;
+  /** Obsidian vault settings from the environment; overrides the saved settings. */
+  vault?: VaultEnv;
   fetch?: typeof fetch;
 }) {
   await mkdir(resolve(options.dataDir, "uploads"), { recursive: true });
   const store = new Store(resolve(options.dataDir, "desktop.sqlite"));
-  const tiles = new TileService(store);
+  const vault = new VaultService(store, options.vault ?? {});
+  const tiles = new TileService(store, vault);
   const weather = new WeatherService(options.fetch ?? fetch);
   const agent = new AgentClient(
     store,
@@ -110,7 +191,7 @@ export async function buildApp(options: {
       .header("X-Frame-Options", "DENY");
     reply.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'self'; img-src 'self' https: data:; media-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
     );
     // Only our own pages may frame an uploaded PDF (the expanded file view).
     if (/^\/uploads\/[\w-]+\.pdf(\?|$)/.test(req.url))
@@ -230,7 +311,7 @@ export async function buildApp(options: {
     const revision = z
       .object({ revision: z.number().int().min(0) })
       .parse(req.body).revision;
-    return store.save(desktopSchema.parse(req.body), revision);
+    return tiles.saveDesktop(desktopSchema.parse(req.body), revision);
   });
   app.get("/api/tokens", async () => ({ tokens: store.listTokens() }));
   app.post("/api/tokens", async (req) => {
@@ -280,6 +361,17 @@ export async function buildApp(options: {
   app.put("/api/layout", async (req) =>
     tiles.setLayout(layoutInput.parse(req.body)),
   );
+  app.get("/api/performance", async () => readPerformance(options.dataDir));
+  app.get("/api/ai-limits", async () => {
+    const status = agent.status();
+    const list = tiles.list();
+    return {
+      agentConfigured: status.configured,
+      model: status.model || "Hermes",
+      agentTilesCount: list.filter((t) => t.origin === "agent").length,
+      activeTokensCount: store.listTokens().length,
+    };
+  });
   app.get("/api/agent", async () => agent.status());
   app.put("/api/agent", async (req) =>
     agent.save(agentSettingsInput.parse(req.body)),
@@ -301,7 +393,69 @@ export async function buildApp(options: {
           .parse(req.body).prompt,
       ),
   );
-  registerMcp(app, tiles);
+  app.get("/api/vault", async () => vault.status());
+  app.put("/api/vault", async (req) =>
+    vault.save(vaultSettingsInput.parse(req.body)),
+  );
+  app.get("/api/vault/notes", async (req) => {
+    const query = z
+      .object({
+        q: z.string().max(120).optional(),
+        folder: z.string().max(240).optional(),
+      })
+      .parse(req.query ?? {});
+    return vault.listNotes({ query: query.q, folder: query.folder });
+  });
+  app.get("/api/vault/note", async (req) => {
+    const { path } = z
+      .object({ path: z.string().min(1).max(240) })
+      .parse(req.query ?? {});
+    return vault.readNote(path);
+  });
+  app.put("/api/vault/note", async (req) => {
+    const body = z
+      .object({
+        path: z.string().max(240).optional(),
+        folder: z.string().max(120).optional(),
+        title: z.string().trim().min(1).max(120),
+        body: z.string().max(10000).default(""),
+        items: z
+          .array(
+            z.object({
+              id: z.string().max(100),
+              text: z.string().max(300),
+              done: z.boolean(),
+            }),
+          )
+          .max(30)
+          .optional(),
+      })
+      .parse(req.body);
+    const note = vault.writeNote(body);
+    // Sync any linked desktop tile with the updated file on disk
+    tiles.snapshot();
+    return note;
+  });
+  app.delete("/api/vault/note", async (req) => {
+    const { path } = z
+      .object({ path: z.string().min(1).max(240) })
+      .parse(req.query ?? {});
+    const canonical = vault.readNote(path).path;
+    const res = vault.trashNote(canonical);
+    store.mutate((d) => {
+      d.tiles = d.tiles.filter((t) => t.config.vaultPath !== canonical);
+      for (const t of d.tiles) {
+        if (t.type === "folder" && t.config.children) {
+          t.config.children = t.config.children.filter(
+            (c) => c.config.vaultPath !== canonical,
+          );
+        }
+      }
+      d.archive = d.archive.filter((t) => t.config.vaultPath !== canonical);
+    });
+    return { ok: true, ...res };
+  });
+  registerMcp(app, tiles, vault);
   app.post("/api/uploads", async (req, reply) => {
     const file = await req.file();
     if (!file) return reply.code(400).send({ error: "Scegli un’immagine." });

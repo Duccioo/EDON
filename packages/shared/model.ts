@@ -10,6 +10,9 @@ export const tileTypes = [
   "weather",
   "progress",
   "file",
+  "performance",
+  "ai_limits",
+  "radio",
 ] as const;
 export type TileType = (typeof tileTypes)[number];
 export const tileSizeLimits: Record<TileType, { w: number; h: number }> = {
@@ -22,6 +25,9 @@ export const tileSizeLimits: Record<TileType, { w: number; h: number }> = {
   weather: { w: 2, h: 2 },
   progress: { w: 2, h: 2 },
   file: { w: 3, h: 3 },
+  performance: { w: 2, h: 2 },
+  ai_limits: { w: 2, h: 2 },
+  radio: { w: 2, h: 2 },
 };
 /** The size a new tile of this type starts with. */
 export const defaultTileSize = (type: TileType) =>
@@ -31,6 +37,9 @@ export const defaultTileSize = (type: TileType) =>
     weather: { w: 2, h: 1 },
     progress: { w: 2, h: 1 },
     file: { w: 2, h: 2 },
+    performance: { w: 2, h: 1 },
+    ai_limits: { w: 2, h: 1 },
+    radio: { w: 2, h: 1 },
   })[type as string] ?? { w: 1, h: 1 };
 export const tileSizeAllowed = (tile: {
   type: TileType;
@@ -67,10 +76,21 @@ export function readableInk(background: string) {
 export const safeFile = (value: string) =>
   /^\/uploads\/[a-f0-9-]{36}\.[a-z0-9]{1,8}$/.test(value);
 export const isPdf = (value: string) => /\.pdf$/i.test(value);
+export const safeVaultPath = (value: string) =>
+  value === "*" ||
+  (!value.startsWith("/") &&
+    !value.endsWith("/") &&
+    !value.includes("\\") &&
+    !value.includes("\0") &&
+    !value.split("/").some((part) => !part || part.startsWith(".")));
 const fileUrl = z
   .string()
   .max(200)
   .refine((v) => !v || safeFile(v), "Usa un file caricato.");
+const vaultPathSchema = z
+  .string()
+  .max(240)
+  .refine((v) => !v || safeVaultPath(v), "Percorso nel vault non valido.");
 const instant = z
   .string()
   .max(40)
@@ -153,6 +173,8 @@ const baseConfigSchema = z.object({
   location: z.string().max(100).default(""),
   /** Uploaded file shown by a file tile. */
   file: fileUrl.default(""),
+  /** Relative path in the Obsidian vault (.md file for notes/todos, folder or '*' for folder tiles). */
+  vaultPath: vaultPathSchema.default(""),
   /** A progress tile fills between these two instants (timer or deadline). */
   startsAt: instant.default(""),
   endsAt: instant.default(""),
@@ -322,27 +344,55 @@ export function createTile(
       weather: "Meteo",
       progress: "Scadenza",
       file: "Nuovo file",
+      performance: "Prestazioni",
+      ai_limits: "Subscription AI",
+      radio: "DJ Osso Radio",
     }[type],
-    subtitle: "",
+    subtitle:
+      type === "radio"
+        ? "Happy Music · Diretta"
+        : type === "performance"
+          ? "Sistema in tempo reale"
+          : type === "ai_limits"
+            ? "Limiti e quote mensili"
+            : "",
     x: 0,
     y: 0,
     w: size?.w ?? defaultTileSize(type).w,
     h: size?.h ?? defaultTileSize(type).h,
     appearance: { ...presets.minimal },
     config: {
-      body: "",
+      body:
+        type === "radio" ? "https://stream.rcs.revma.com/x3ab37sgn7uvv" : "",
       icon: "↗",
       image: "",
       location: "",
       file: "",
+      vaultPath: "",
       startsAt: "",
       endsAt: "",
       pausedAt: "",
       timezone: "",
-      items: [],
+      items:
+        type === "ai_limits"
+          ? [
+              { id: "claude", text: "Claude Max | 65% | Reset 5h", done: false },
+              {
+                id: "chatgpt",
+                text: "ChatGPT Plus | 40% | Reset 3h",
+                done: false,
+              },
+              { id: "cursor", text: "Cursor Pro | 72% | 18 gg", done: false },
+              {
+                id: "hermes",
+                text: "Hermes / OpenRouter | 15% | API",
+                done: false,
+              },
+            ]
+          : [],
       children: [],
     },
-    url: "",
+    url: type === "radio" ? "https://www.djossoradio.it" : "",
     createdAt: now,
     updatedAt: now,
     origin: "user",
@@ -386,6 +436,7 @@ export function createFolderChild(
       image: "",
       location: "",
       file: "",
+      vaultPath: "",
       startsAt: "",
       endsAt: "",
       pausedAt: "",

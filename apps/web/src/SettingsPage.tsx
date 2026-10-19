@@ -19,6 +19,7 @@ import { request } from "./api";
 import { GlobalSettings } from "./GlobalSettings";
 import { AgentSettings } from "./AgentSettings";
 import { AgentTokens } from "./AgentTokens";
+import { VaultSettings } from "./VaultView";
 
 export type SettingsSection =
   | "aspetto"
@@ -249,18 +250,11 @@ function DataPanel({
   );
 }
 
-function IntegrationsPanel() {
+function IntegrationsPanel({ onVaultChange }: { onVaultChange?: () => void }) {
   return (
     <div className="settings-panel">
       <h3>Collegate</h3>
-      <div className="integration-card">
-        <strong>Obsidian</strong>
-        <p className="hint">
-          Le tile collegamento accettano URI <code>obsidian://</code> per aprire
-          note e vault. Non serve configurazione: crea una tile collegamento con
-          l’URI della nota.
-        </p>
-      </div>
+      <VaultSettings onChanged={onVaultChange} />
       <div className="integration-card">
         <strong>MCP e API per agenti</strong>
         <p className="hint">
@@ -331,6 +325,7 @@ export function SettingsPage({
   onImport,
   onClose,
   onNotice,
+  onVaultChange,
   initial = "aspetto",
 }: {
   settings: Desktop["settings"];
@@ -339,6 +334,7 @@ export function SettingsPage({
   onImport: (d: Desktop) => void;
   onClose: () => void;
   onNotice: (m: string) => void;
+  onVaultChange?: () => void;
   initial?: Section;
 }) {
   const [section, setSection] = useState<Section>(initial);
@@ -425,7 +421,9 @@ export function SettingsPage({
                 onNotice={onNotice}
               />
             )}
-            {section === "integrazioni" && <IntegrationsPanel />}
+            {section === "integrazioni" && (
+              <IntegrationsPanel onVaultChange={onVaultChange} />
+            )}
             {section === "info" && <InfoPanel desktop={desktop} />}
           </div>
         </div>

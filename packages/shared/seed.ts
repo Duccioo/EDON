@@ -21,6 +21,7 @@ export function seedDesktop(): Desktop {
     image,
     location: "",
     file: "",
+    vaultPath: "",
     startsAt: "",
     endsAt: "",
     pausedAt: "",

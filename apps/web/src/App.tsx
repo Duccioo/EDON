@@ -8,7 +8,11 @@ import {
 } from "react";
 import GridLayout, { type Layout } from "react-grid-layout";
 import {
+  Activity,
   Archive,
+  BookOpen,
+  Keyboard,
+  Radio,
   RotateCcw,
   Sparkles,
   ArrowUpRight,
@@ -54,12 +58,13 @@ import { fitBoard } from "../../../packages/shared/board";
 import { TileView, tileStyle, QuickAppend } from "./TileView";
 import { FolderView } from "./FolderView";
 import { Inspector } from "./Inspector";
-import { Modal } from "./Modal";
+import { Modal, SideWorkspace } from "./Modal";
 import { SettingsPage, type SettingsSection } from "./SettingsPage";
 import { DesktopTools } from "./DesktopTools";
 import { CaptureComposer } from "./CaptureComposer";
 import { AgentCreator } from "./AgentCreator";
 import { ArchiveView } from "./ArchiveView";
+import { VaultView, type VaultNoteDetail, type VaultStatus } from "./VaultView";
 import { captureSource, type Capture } from "../../../packages/shared/capture";
 
 type Auth = { configured: boolean; authenticated: boolean };
@@ -162,20 +167,70 @@ function Login({
     </main>
   );
 }
+
+const KEYBOARD_SHORTCUTS = [
+  ["N", "Nuova nota Markdown"],
+  ["T", "Nuova lista TODO"],
+  ["A / +", "Catalogo per aggiungere una tile"],
+  ["V", "Apri o chiudi il Vault Obsidian"],
+  ["E", "Attiva o termina la modalità modifica"],
+  ["C", "Compatta le tile eliminando gli spazi vuoti"],
+  ["D", "Sposta il pannello laterale a sinistra o destra"],
+  ["/ oppure ⌘K", "Scrivi subito nella barra Appunta qualcosa"],
+  ["S", "Apri le impostazioni"],
+  ["?", "Mostra le scorciatoie da tastiera"],
+  ["Doppio clic", "Modifica al volo una nota (sul desktop o aperta)"],
+  ["Esc", "Chiudi pannello o esci dalla modifica"],
+] as const;
+
 function DesktopApp({ onLogout }: { onLogout: () => void }) {
   const { desktop, update, status, error, retry, refresh } = useDesktop();
   const ink = useDesktopInk(desktop?.settings);
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [dialog, setDialog] = useState<
-    "add" | "settings" | "text" | "data" | "agent" | "archive" | null
+    | "add"
+    | "settings"
+    | "text"
+    | "data"
+    | "agent"
+    | "archive"
+    | "shortcuts"
+    | null
   >(null);
+  const [vaultOpen, setVaultOpen] = useState<{
+    folder: string;
+    path: string;
+  } | null>(null);
+  const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
+  const loadVaultStatus = useCallback(() => {
+    request<VaultStatus>("/api/vault")
+      .then(setVaultStatus)
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadVaultStatus();
+  }, [loadVaultStatus]);
+  const [dockSide, setDockSide] = useState<"left" | "right">(() =>
+    typeof localStorage !== "undefined" &&
+    localStorage.getItem("edon-dock-side") === "left"
+      ? "left"
+      : "right",
+  );
+  const changeDockSide = useCallback((next: "left" | "right") => {
+    setDockSide(next);
+    try {
+      localStorage.setItem("edon-dock-side", next);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, []);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("aspetto");
-  const openSettings = (section: SettingsSection = "aspetto") => {
+  const openSettings = useCallback((section: SettingsSection = "aspetto") => {
     setSettingsSection(section);
     setDialog("settings");
-  };
+  }, []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState(false);
@@ -209,6 +264,14 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   );
   const [dockHeight, setDockHeight] = useState(64);
   const viewport = useRef<HTMLElement>(null);
+  const panDrag = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+  const [panning, setPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [dropping, setDropping] = useState(false);
   const addFilesRef = useRef<(files: File[]) => void>(() => {});
@@ -230,6 +293,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   }, []);
   const [space, setSpace] = useState({
     width: 1050,
+    fullWidth: 1050,
     height: 650,
     fitted: false,
   });
@@ -238,8 +302,11 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const measure = () => {
       if (!viewport.current) return;
+      const clientW = Math.floor(viewport.current.clientWidth);
+      const fullW = Math.max(clientW, Math.floor(window.innerWidth - 80));
       setSpace({
-        width: Math.floor(viewport.current.clientWidth),
+        width: clientW,
+        fullWidth: fullW,
         height: Math.floor(viewport.current.clientHeight),
         fitted: matchMedia("(min-width: 900px) and (min-height: 600px)")
           .matches,
@@ -258,28 +325,101 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     setEditing((old) => !old);
     setSelected(null);
   }, []);
+  const compactRef = useRef<() => void>(() => {});
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest("input,textarea,select,[contenteditable],dialog"))
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const captureInput = document.querySelector<HTMLTextAreaElement>(
+          '.capture-bar textarea[aria-label="Appunta qualcosa"]',
+        );
+        captureInput?.focus();
         return;
-      if (
-        e.key.toLowerCase() === "e" &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey
-      ) {
+      }
+      if (target.closest("input,textarea,select,[contenteditable],dialog:not([data-closing])"))
+        return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "e") {
         e.preventDefault();
         toggleEdit();
+        return;
+      }
+      if (k === "n") {
+        e.preventDefault();
+        setDialog("text");
+        return;
+      }
+      if (k === "t") {
+        e.preventDefault();
+        setDialog("data");
+        return;
+      }
+      if (k === "a" || e.key === "+") {
+        e.preventDefault();
+        setDialog("add");
+        return;
+      }
+      if (k === "v") {
+        e.preventDefault();
+        setExpandedId(null);
+        setEditingNote(false);
+        setVaultOpen((old) => (old ? null : { folder: "", path: "" }));
+        return;
+      }
+      if (k === "c") {
+        e.preventDefault();
+        compactRef.current();
+        return;
+      }
+      if (k === "s") {
+        e.preventDefault();
+        openSettings("aspetto");
+        return;
+      }
+      if (k === "d") {
+        e.preventDefault();
+        changeDockSide(dockSide === "right" ? "left" : "right");
+        return;
+      }
+      if (e.key === "/") {
+        e.preventDefault();
+        const captureInput = document.querySelector<HTMLTextAreaElement>(
+          '.capture-bar textarea[aria-label="Appunta qualcosa"]',
+        );
+        captureInput?.focus();
+        return;
+      }
+      if (e.key === "?") {
+        e.preventDefault();
+        setDialog((old) => (old === "shortcuts" ? null : "shortcuts"));
+        return;
       }
       if (e.key === "Escape") {
+        if (expandedId) {
+          closeExpanded();
+          return;
+        }
+        if (vaultOpen) {
+          setVaultOpen(null);
+          return;
+        }
         setSelected(null);
         setEditing(false);
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [toggleEdit]);
+  }, [
+    toggleEdit,
+    openSettings,
+    changeDockSide,
+    dockSide,
+    expandedId,
+    vaultOpen,
+    closeExpanded,
+  ]);
   useEffect(() => {
     if (editing && pendingGrab.current) {
       const { el, x, y } = pendingGrab.current;
@@ -299,6 +439,8 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const release = () => {
       cancelPress();
+      panDrag.current = null;
+      setPanning(false);
       setTimeout(() => (suppressClick.current = false), 150);
     };
     window.addEventListener("pointerup", release);
@@ -368,6 +510,17 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   );
   const isArchived = desktop.archive.some((t) => t.id === expandedId);
   const openFolder = desktop.tiles.find((t) => t.id === openFolderId);
+  const sideOpen = Boolean(expanded || vaultOpen);
+  const openTileSide = (id: string, edit = false) => {
+    setVaultOpen(null);
+    setExpandedId(id);
+    setEditingNote(edit);
+  };
+  const openVaultSide = (folder = "", path = "") => {
+    setExpandedId(null);
+    setEditingNote(false);
+    setVaultOpen({ folder, path });
+  };
   const toggleFolderItem = (
     folderId: string,
     childId: string,
@@ -516,11 +669,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     });
   const archiveNote = (id: string) => {
     try {
+      const target = desktop.tiles.find((t) => t.id === id);
       const next = archiveTile(desktop, id);
       update(() => next);
       if (expandedId === id) closeExpanded();
       if (selected === id) setSelected(null);
-      setNotice("Appunto archiviato. Lo ritrovi in Archivio.");
+      setNotice(
+        vaultStatus?.configured || target?.config.vaultPath
+          ? "Rimossa dal desktop. La nota resta nel tuo Vault Obsidian."
+          : "Appunto archiviato. Lo ritrovi in Archivio.",
+      );
     } catch (e) {
       setNotice((e as Error).message);
     }
@@ -529,6 +687,68 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     const next = restoreTile(desktop, id);
     update(() => next);
     setNotice("Appunto ripristinato nel desktop.");
+  };
+  const pinVaultNote = (note: VaultNoteDetail) => {
+    try {
+      const existing = desktop.tiles.find(
+        (t) => t.config.vaultPath === note.path,
+      );
+      if (existing) {
+        setNotice("Questa nota è già presente sul desktop.");
+        return;
+      }
+      const sizes =
+        note.kind === "data"
+          ? [
+              { w: 2, h: 2 },
+              { w: 2, h: 1 },
+              { w: 1, h: 1 },
+            ]
+          : [
+              { w: 2, h: 1 },
+              { w: 1, h: 1 },
+            ];
+      const size = sizes.find((sz) =>
+        findTileSpace(desktop.tiles, sz, desktop.settings),
+      );
+      if (!size)
+        throw new Error(
+          "La griglia è piena. Togli una tile o aumenta righe e colonne in Aspetto.",
+        );
+      const next = createTile(
+        note.kind,
+        desktop.tiles,
+        size,
+        desktop.settings.maxTiles,
+        desktop.settings,
+      );
+      next.title = note.title;
+      next.config.body = note.body;
+      next.config.items = note.items;
+      next.config.vaultPath = note.path;
+      update((old) => ({ ...old, tiles: [...old.tiles, next] }));
+      setNotice(`“${note.title}” fissata sul desktop.`);
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  };
+  const pinVaultFolder = (folderPath: string, title: string) => {
+    try {
+      const next = createTile(
+        "folder",
+        desktop.tiles,
+        { w: 2, h: 2 },
+        desktop.settings.maxTiles,
+        desktop.settings,
+      );
+      next.title = title;
+      next.subtitle = "Vault Obsidian";
+      next.config.vaultPath = folderPath;
+      update((old) => ({ ...old, tiles: [...old.tiles, next] }));
+      setNotice(`Cartella “${title}” aggiunta al desktop.`);
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
   };
   const saveCapture = (draft: Capture) => {
     const sizes =
@@ -568,6 +788,12 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     setDialog(null);
     setEditing(false);
     setSelected(null);
+    if (vaultStatus?.configured && draft.kind !== "link") {
+      setTimeout(() => {
+        void refresh();
+        loadVaultStatus();
+      }, 350);
+    }
     setNotice(
       draft.kind === "link"
         ? "Collegamento aggiunto al desktop."
@@ -586,6 +812,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     setGridEpoch((n) => n + 1);
     setNotice("Spazi vuoti rimossi.");
   };
+  compactRef.current = compact;
   const add = (type: TileType) => {
     if (type === "text" || type === "data") {
       setDialog(type);
@@ -717,13 +944,17 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     article.style.setProperty("--my", `${((py + 0.5) * 100).toFixed(1)}%`);
     article.style.setProperty("--tilt", "1");
   };
-  const renderTile = (t: Tile) => (
+  const renderTile = (t: Tile, index = 0) => (
     <div
       key={t.id}
       id={`tile-${t.id}`}
       data-testid={`tile-${t.type}`}
       style={
-        { "--mobile-w": Math.min(4, t.w), "--mobile-h": t.h } as CSSProperties
+        {
+          "--mobile-w": Math.min(4, t.w),
+          "--mobile-h": t.h,
+          "--tile-index": index,
+        } as CSSProperties
       }
       className={`tile-shell ${folderTarget === t.id ? "folder-drop-ready" : ""} size-${t.w}-${t.h} ${selected === t.id ? (editing ? "selected" : "search-selected") : ""} ${pressing === t.id ? "pressing" : ""}`}
       onDragStart={(e) => e.preventDefault()}
@@ -784,8 +1015,24 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               t.type === "folder" ||
               t.type === "file") &&
             !(e.target as HTMLElement).closest("button,a,input,textarea")
-          )
-            t.type === "folder" ? setOpenFolderId(t.id) : setExpandedId(t.id);
+          ) {
+            if (t.type === "folder") {
+              if (t.config.vaultPath) openVaultSide(t.config.vaultPath, "");
+              else setOpenFolderId(t.id);
+            } else {
+              openTileSide(t.id);
+            }
+          }
+        }}
+        onDoubleClick={(e) => {
+          if (
+            !editing &&
+            (t.type === "text" || t.type === "data") &&
+            !(e.target as HTMLElement).closest("button,a,input,textarea")
+          ) {
+            e.stopPropagation();
+            openTileSide(t.id, true);
+          }
         }}
       >
         <div
@@ -813,7 +1060,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           <div className="tile-content-actions">
             <button
               className="tile-expand"
-              onClick={() => setExpandedId(t.id)}
+              onClick={() => openTileSide(t.id)}
               aria-label={`Apri ${t.title}`}
             >
               {t.type === "text"
@@ -824,18 +1071,19 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             <button
               className="tile-quick-edit"
               aria-label={`Modifica contenuto ${t.title}`}
-              title="Modifica contenuto"
-              onClick={() => {
-                setExpandedId(t.id);
-                setEditingNote(true);
-              }}
+              title="Modifica contenuto (o fai doppio clic sulla nota)"
+              onClick={() => openTileSide(t.id, true)}
             >
               <Pencil size={14} />
             </button>
             <button
               className="tile-quick-edit"
               aria-label={`Archivia ${t.title}`}
-              title="Archivia"
+              title={
+                vaultStatus?.configured || t.config.vaultPath
+                  ? "Togli dal desktop (resta nel Vault)"
+                  : "Archivia"
+              }
               onClick={() => archiveNote(t.id)}
             >
               <Archive size={14} />
@@ -845,7 +1093,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         {!editing && t.type === "file" && t.config.file && (
           <button
             className="tile-expand"
-            onClick={() => setExpandedId(t.id)}
+            onClick={() => openTileSide(t.id)}
             aria-label={`Apri ${t.title}`}
           >
             Apri
@@ -854,22 +1102,31 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         {!editing && t.type === "folder" && (
           <button
             className="tile-expand"
-            onClick={() => setOpenFolderId(t.id)}
+            onClick={() => {
+              if (t.config.vaultPath) openVaultSide(t.config.vaultPath, "");
+              else setOpenFolderId(t.id);
+            }}
             aria-label={`Apri cartella ${t.title}`}
           >
-            Apri cartella ({(t.config.children ?? []).length})
+            {t.config.vaultPath
+              ? "Esplora nel Vault"
+              : `Apri cartella (${(t.config.children ?? []).length})`}
             <ArrowUpRight size={14} />
           </button>
         )}
-        {!editing && t.url && t.type !== "data" && t.type !== "folder" && (
-          <a
-            className="tile-link"
-            href={t.url}
-            target={t.url.startsWith("obsidian:") ? undefined : "_blank"}
-            rel="noopener noreferrer"
-            aria-label={`Apri ${t.title}`}
-          />
-        )}
+        {!editing &&
+          t.url &&
+          t.type !== "data" &&
+          t.type !== "folder" &&
+          t.type !== "radio" && (
+            <a
+              className="tile-link"
+              href={t.url}
+              target={t.url.startsWith("obsidian:") ? undefined : "_blank"}
+              rel="noopener noreferrer"
+              aria-label={`Apri ${t.title}`}
+            />
+          )}
         {editing && (
           <button
             className="tile-select"
@@ -896,7 +1153,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     </div>
   );
   const s = desktop.settings;
-  const board = fitBoard(desktop.tiles, space.width, space.height, s.gap, s);
+  // When a side workspace is open, keep the board sized to the full desktop width
+  // so tiles never shrink or get squished; the viewport scrolls horizontally alongside the document.
+  const targetBoardWidth = sideOpen ? space.fullWidth : space.width;
+  const board = fitBoard(
+    desktop.tiles,
+    targetBoardWidth,
+    space.height,
+    s.gap,
+    s,
+  );
   const width = space.fitted ? board.width : space.width;
   const gap = space.fitted ? board.gap : s.gap;
   const rowHeight = space.fitted
@@ -919,7 +1185,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   };
   return (
     <div
-      className={`desktop ${space.fitted && rowHeight < 120 ? "desktop-dense" : ""} ${editing ? "editing" : ""} ${tile && editing ? "with-inspector" : ""}`}
+      className={`desktop ${space.fitted && rowHeight < 120 ? "desktop-dense" : ""} ${editing ? "editing" : ""} ${tile && editing ? "with-inspector" : ""} ${sideOpen ? `with-side with-side-${dockSide} ${vaultOpen ? "with-side-wide" : ""}` : ""}`}
       style={
         {
           ...wallpaper,
@@ -952,8 +1218,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           </span>
           <button
             className="icon-button"
+            aria-label="Scorciatoie da tastiera"
+            title="Scorciatoie da tastiera (?)"
+            onClick={() => setDialog("shortcuts")}
+          >
+            <Keyboard size={16} />
+          </button>
+          <button
+            className="icon-button"
             aria-label="Impostazioni"
-            title="Impostazioni"
+            title="Impostazioni (S)"
             onClick={() => openSettings("aspetto")}
           >
             <Settings2 size={16} />
@@ -974,7 +1248,42 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       </header>
       <main
         ref={viewport}
-        className={`desktop-main ${space.fitted ? "desktop-viewport" : ""}`}
+        className={`desktop-main ${space.fitted ? "desktop-viewport" : ""} ${panning ? "is-panning" : ""}`}
+        onWheel={(e) => {
+          const el = viewport.current;
+          if (!el || !sideOpen) return;
+          if (el.scrollWidth <= el.clientWidth) return;
+          // Translate vertical mouse wheel ticks into horizontal desktop scrolling when not inside a scrollable inner element
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            el.scrollLeft += e.deltaY;
+          }
+        }}
+        onPointerDown={(e) => {
+          const el = viewport.current;
+          if (!el || editing || e.button !== 0) return;
+          if (el.scrollWidth <= el.clientWidth) return;
+          if (
+            (e.target as HTMLElement).closest(
+              ".tile-shell,button,a,input,textarea",
+            )
+          )
+            return;
+          panDrag.current = {
+            active: true,
+            startX: e.clientX,
+            startY: e.clientY,
+            scrollLeft: el.scrollLeft,
+            scrollTop: el.scrollTop,
+          };
+          setPanning(true);
+        }}
+        onPointerMove={(e) => {
+          const el = viewport.current;
+          const drag = panDrag.current;
+          if (!el || !drag?.active) return;
+          el.scrollLeft = drag.scrollLeft - (e.clientX - drag.startX);
+          el.scrollTop = drag.scrollTop - (e.clientY - drag.startY);
+        }}
       >
         <div
           className="board-frame"
@@ -1039,7 +1348,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               </div>
             ) : !space.fitted ? (
               <div className="mobile-tile-grid" style={{ gap: s.gap }}>
-                {desktop.tiles.map(renderTile)}
+                {desktop.tiles.map((t, i) => renderTile(t, i))}
               </div>
             ) : (
               <GridLayout
@@ -1119,7 +1428,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                 }}
                 onResizeStop={saveLayout}
               >
-                {desktop.tiles.map(renderTile)}
+                {desktop.tiles.map((t, i) => renderTile(t, i))}
               </GridLayout>
             )}
           </div>
@@ -1133,6 +1442,10 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         onCompact={compact}
         onArchive={() => setDialog("archive")}
         archiveCount={desktop.archive.length}
+        onVault={() => openVaultSide("", "")}
+        vaultConfigured={Boolean(vaultStatus?.configured)}
+        vaultCount={vaultStatus?.noteCount ?? 0}
+        onShortcuts={() => setDialog("shortcuts")}
         onSaveCapture={saveCapture}
         onHeightChange={setDockHeight}
       />
@@ -1142,7 +1455,13 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           canDuplicate={!atCapacity && !!findTileSpace(desktop.tiles, tile, s)}
           onChange={setTile}
           onOpenFolder={
-            tile.type === "folder" ? () => setOpenFolderId(tile.id) : undefined
+            tile.type === "folder"
+              ? () => {
+                  if (tile.config.vaultPath)
+                    openVaultSide(tile.config.vaultPath, "");
+                  else setOpenFolderId(tile.id);
+                }
+              : undefined
           }
           onMove={(dx, dy) =>
             setTile({
@@ -1216,6 +1535,22 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               </span>
               <ChevronRight size={18} />
             </button>
+            <button
+              className="agent-catalog-item"
+              onClick={() => {
+                setDialog(null);
+                openVaultSide("", "");
+              }}
+            >
+              <BookOpen size={24} />
+              <span>
+                <strong>Vault Obsidian</strong>
+                <small>
+                  Esplora le tue note .md o fissa una nota/cartella sul desktop
+                </small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
             {(
               [
                 [Link2, "link", "Collegamento", "App, siti e scorciatoie"],
@@ -1247,6 +1582,24 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                   "File o PDF",
                   "Con anteprima. Puoi anche trascinarli qui",
                 ],
+                [
+                  Activity,
+                  "performance",
+                  "Prestazioni",
+                  "Monitoraggio CPU, RAM e disco in tempo reale",
+                ],
+                [
+                  Sparkles,
+                  "ai_limits",
+                  "Subscription AI limits",
+                  "Quote e limiti dei tuoi abbonamenti AI",
+                ],
+                [
+                  Radio,
+                  "radio",
+                  "DJ Osso Radio",
+                  "Player streaming in diretta · Happy Music",
+                ],
               ] as const
             ).map(([Icon, type, title, description]) => (
               <button
@@ -1272,6 +1625,27 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           </div>
         </Modal>
       )}
+      {dialog === "shortcuts" && (
+        <Modal
+          title="Scorciatoie da tastiera"
+          className="shortcuts-modal"
+          onClose={closeDialog}
+        >
+          <p className="modal-intro">
+            Muoviti nel desktop senza staccare le mani dalla tastiera.
+          </p>
+          <dl className="shortcuts-list">
+            {KEYBOARD_SHORTCUTS.map(([keyCombo, desc]) => (
+              <div key={keyCombo} className="shortcut-row">
+                <dt>
+                  <kbd>{keyCombo}</kbd>
+                </dt>
+                <dd>{desc}</dd>
+              </div>
+            ))}
+          </dl>
+        </Modal>
+      )}
       {dialog === "settings" && (
         <SettingsPage
           key={settingsSection}
@@ -1287,6 +1661,10 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           onImport={importDesktop}
           onClose={closeDialog}
           onNotice={setNotice}
+          onVaultChange={() => {
+            loadVaultStatus();
+            void refresh();
+          }}
         />
       )}
       {openFolder && (
@@ -1347,17 +1725,46 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             tiles={desktop.archive}
             onOpen={(id) => {
               setDialog(null);
-              setExpandedId(id);
+              openTileSide(id);
             }}
             onRestore={restoreNote}
           />
         </Modal>
       )}
+      {vaultOpen && (
+        <SideWorkspace
+          title="Vault Obsidian"
+          side={dockSide}
+          onSideChange={changeDockSide}
+          wide
+          className="vault-workspace"
+          onClose={() => setVaultOpen(null)}
+        >
+          <VaultView
+            desktop={desktop}
+            initialFolder={vaultOpen.folder}
+            initialPath={vaultOpen.path}
+            onPinNote={pinVaultNote}
+            onUnpinNote={(id) => archiveNote(id)}
+            onPinFolder={pinVaultFolder}
+            onRefreshDesktop={() => {
+              void refresh();
+              loadVaultStatus();
+            }}
+            onOpenSettings={() => {
+              setVaultOpen(null);
+              openSettings("integrazioni");
+            }}
+            onNotice={setNotice}
+          />
+        </SideWorkspace>
+      )}
       {expanded && (
-        <Modal
+        <SideWorkspace
           title={editingNote ? "Modifica" : "Vista completa"}
+          side={dockSide}
+          onSideChange={changeDockSide}
           className={`tile-focus-modal content-${expanded.type}`}
-          sourceId={`tile-${expanded.id}`}
           onClose={closeExpanded}
         >
           {editingNote &&
@@ -1395,6 +1802,21 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             <article
               className={`tile expanded-tile tile-${expanded.type} font-${expanded.appearance.font}`}
               style={tileStyle(expanded, s)}
+              title={
+                !isArchived &&
+                (expanded.type === "text" || expanded.type === "data")
+                  ? "Doppio clic per modificare la nota"
+                  : undefined
+              }
+              onDoubleClick={(e) => {
+                if (
+                  !isArchived &&
+                  (expanded.type === "text" || expanded.type === "data") &&
+                  !(e.target as HTMLElement).closest("button,a,input,textarea")
+                ) {
+                  setEditingNote(true);
+                }
+              }}
             >
               <TileView
                 tile={expanded}
@@ -1470,9 +1892,22 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                     <Trash2 size={15} />
                     Elimina
                   </button>
+                  {expanded.config.vaultPath && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openVaultSide("", expanded.config.vaultPath)
+                      }
+                    >
+                      <BookOpen size={15} />
+                      Nel Vault
+                    </button>
+                  )}
                   <button onClick={() => archiveNote(expanded.id)}>
                     <Archive size={16} />
-                    Archivia
+                    {vaultStatus?.configured || expanded.config.vaultPath
+                      ? "Togli dal desktop"
+                      : "Archivia"}
                   </button>
                 </>
               )}
@@ -1488,11 +1923,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                 )}
             </div>
           )}
-        </Modal>
+        </SideWorkspace>
       )}
       {deleting && (
         <Modal title="Eliminare questa tile?" onClose={closeDelete}>
-          <p>“{deleting.title}” verrà rimossa dal desktop.</p>
+          <p>
+            “{deleting.title}” verrà rimossa dal desktop
+            {deleting.config.vaultPath
+              ? " e il file .md verrà spostato nel cestino del Vault."
+              : "."}
+          </p>
           <div className="dialog-actions">
             <button onClick={closeDelete}>Annulla</button>
             <button

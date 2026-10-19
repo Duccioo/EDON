@@ -9,6 +9,9 @@ services:
       HERMES_URL: "${HERMES_URL:-}"
       HERMES_API_KEY: "${HERMES_API_KEY:-}"
       HERMES_MODEL: "${HERMES_MODEL:-}"
+      OBSIDIAN_VAULT_PATH: "${OBSIDIAN_VAULT_PATH:-}"
+      OBSIDIAN_FOLDER: "${OBSIDIAN_FOLDER:-}"
+      OBSIDIAN_ARCHIVE_FOLDER: "${OBSIDIAN_ARCHIVE_FOLDER:-}"
     volumes:
       - edon-data:/app/data
     restart: unless-stopped

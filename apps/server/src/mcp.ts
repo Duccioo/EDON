@@ -10,6 +10,7 @@ import {
   upsertInput,
   type TileService,
 } from "./tiles";
+import type { VaultService } from "./vault";
 
 const json = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
@@ -40,7 +41,7 @@ const run =
   };
 
 /** A thin MCP adapter over TileService, one server per request (stateless). */
-export function mcpServer(tiles: TileService) {
+export function mcpServer(tiles: TileService, vault?: VaultService) {
   const server = new McpServer({ name: "edon", version: "0.1.0" });
   server.registerTool(
     "list_tiles",
@@ -53,7 +54,7 @@ export function mcpServer(tiles: TileService) {
     "create_tile",
     {
       description:
-        "Crea una tile (origin=agent) nel primo spazio libero, senza spostare le altre. Usa list_tile_types per campi e valori.",
+        "Crea una tile (origin=agent) nel primo spazio libero, senza spostare le altre. Usa list_tile_types per campi e valori; per collegare una nota del vault di Obsidian passa config.vaultPath.",
       inputSchema: createInput.shape,
     },
     run((args: z.infer<typeof createInput>) => ({ tile: tiles.create(args) })),
@@ -108,12 +109,45 @@ export function mcpServer(tiles: TileService) {
     },
     run(() => ({ types: tiles.types() })),
   );
+  server.registerTool(
+    "list_vault_notes",
+    {
+      description:
+        "Elenca o cerca le note .md e le cartelle presenti nel vault di Obsidian collegato a EDON.",
+      inputSchema: {
+        query: z.string().max(120).optional(),
+        folder: z.string().max(240).optional(),
+      },
+    },
+    run((args: { query?: string; folder?: string }) => {
+      if (!vault) throw new TileError(409, "Vault non configurato.");
+      return vault.listNotes(args);
+    }),
+  );
+  server.registerTool(
+    "read_vault_note",
+    {
+      description:
+        "Legge il contenuto Markdown e le voci TODO di una nota .md nel vault di Obsidian.",
+      inputSchema: {
+        path: z.string().min(1).max(240),
+      },
+    },
+    run(({ path }: { path: string }) => {
+      if (!vault) throw new TileError(409, "Vault non configurato.");
+      return vault.readNote(path);
+    }),
+  );
   return server;
 }
 
-export function registerMcp(app: FastifyInstance, tiles: TileService) {
+export function registerMcp(
+  app: FastifyInstance,
+  tiles: TileService,
+  vault?: VaultService,
+) {
   app.post("/mcp", async (req, reply) => {
-    const server = mcpServer(tiles);
+    const server = mcpServer(tiles, vault);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

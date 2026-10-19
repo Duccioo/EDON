@@ -1,34 +1,53 @@
 # TODO
 
----
+
+- [ ] Ancora vedo poche animazioni, tipo quando apro un tile o quando lo chiudo, oppure quando apro le impostazioni, oppure quando apro il menù di aggiunta tile.
+- [ ] Il modo con cui faccio l'editing di una nota è sbagliato. Non voglio che si apra un editor, voglio che sia sempre una sorta di editor inline, cioè che posso modificare la nota direttamente sul tile senza un editor a parte, il rendering in markdown avviene in tempo reale mentre scrivo (si renderizza solo dopo che vado a capo, non ad ogni lettera digitata).
+  - [ ] Magari aggiungere un pulsante per farlo tornare o in modalità testo normale o in modalità markdown compilato on the fly per chi non lo vuole.
+  - [ ] Aggiungere la possibilità di cambiare il colore dello sfondo direttamente nella pagina del tile, senza dover aprire le impostazioni (basta metterci qualche colore in alto)
+  - [ ] il lato esterno della pagina lo voglio che sia a filo della finestra mentre il lato interno voglio che sia resizable.
+- [ ] Per aggiungere note o altro è sufficinete iniziare a scrivere con la tastiera, e poi il desktop capisce che voglio aggiungere una nota o un todo o altro, e mi fa scegliere cosa voglio aggiungere.
+  - [ ] Aggiunstare il bug che quando scrivo parecchio il desktop si rimpicciolisce in alto. Magari quando 
+- [ ] Gli sfondi animati non funzionano più
+- [ ] L'effetto 3d Parallasse sui tile non è evidente...
 - [ ] Passando su un tile di testo molto lungo se scorro col mouse il contenuto del tile scorre, invece di dover aprire il tile per vedere tutto il contenuto.
+
+
+
+---
 - [ ] Tile calendario
 - [ ] Cliccando sul tile meteo si apre un popup con le previsioni del meteo per i prossimi giorni e con più informazioni.
-- [ ] Aggiungere un'integrazione profonda con Obsidian.
 - [ ] Scrivere una documentazione approfondita.
 - [ ] Aggiungere un'integrazione profonda con Paperless-ngx.
 - [ ] Aggiungere l'integrazione con Google Calendar.
 - [ ] Consentire la configurazione di tutte le integrazioni sia tramite lo stack Docker sia dall'interfaccia, nelle impostazioni.
 - [ ] Aggiungere un'estetica Wii-style: Nintendo anni 2000–2010, iisu, Cocoon, [Neo-Vectorheart](https://cari.institute/aesthetics/neo-vectorheart), [Neo-Y2K](https://cari.institute/aesthetics/neo-y2k) e glasstype.
 - [x] Animazioni e micro-interazioni di prodotto (entrance tile, dialog, toast, hover) nel rispetto di `prefers-reduced-motion`.
-    - [ ] NO, le animazioni vanno fatte per bene e devono essere molto presenti.
+  - [x] NO, le animazioni vanno fatte per bene e devono essere molto presenti.
 - [ ] Aggiungere la possibilità di fare più viste (Tipo vista lavoro, vista personale, ecc.) e poterle cambiare velocemente.
 
-
-
 ---
+- [x] Tile prestazioni
+- [x] Tile Subscription AI limits
+- [x] Mancano le animaizoni
+- [x] Keybinding rapidi
+- [x] Tile radio DJ osso
+- [x] barra di "appunta qualcosa" e il bottone centroale si sovrappongono quando apro l'editor delle note
+- [x] Editor delle note: doppio click per modificare la nota, il rendering markdown avviene ogni volta che vado a capo.
+- [x] Aggiungere un'integrazione profonda con Obsidian.
+  - Opzionale ma profonda (configurabile da `.env`/Docker e da `Impostazioni → Integrazioni`), con sincronizzazione bidirezionale su file `.md` puliti, esplora Vault, tile cartella/vault, strumenti MCP per agenti AI e vista documento laterale (sinistra/destra) con desktop scorrevole.
 - [x] Lo sfondo animato circolare è troppo oneroso, magari ridorre il numero di scritte e renderlo più efficiente.
 - [x] L'effetto 3D non funziona.
 - [x] La grandezza dei tile orizzontali facciamola a multipli di 4
-    - così per avere la vista desktop full e poi la vista mobile a 4 tipe orizzontali e poi a mò di lista
+  - così per avere la vista desktop full e poi la vista mobile a 4 tipe orizzontali e poi a mò di lista
 - [x] Modificare la trasparenza dello sfondo
 - [x] Migliorare la gestione delle cartelle!
-    - [x] Quando trascino un tile a lungo sopra una cartella, la cartella si  un po' (fa un animazione) e posso rilasciare il tile dentro.
+  - [x] Quando trascino un tile a lungo sopra una cartella, la cartella si un po' (fa un animazione) e posso rilasciare il tile dentro.
 - [x] Per i tile di testo (note, todo, ecc.) posso farli alti quanto mi pare e se c'è spazio è possibile sia aggiungere una todo direttamente al volo con un pulstante oppure aggiungere del testo alla nota direttamente al volo con un pulsante sul tile invece di dover aprire il tile e poi modificare il contenuto.
 - [x] Quando sono in modalità modifica, compare un pulsante nei tile per eliminare velocemente.
 - [x] Lo sfondo ruotante non è centrato sulla scritta in alto a sinistra "edon".
-    - andrebbe fatto anche che gli archi della circonferenza arrivano molto più distanti, cioè c'è più roba
-    - il testo EDON e NODE lo vorrei normale e non in ASCII e lo vorrei che girasse attorno alla circonferenza, tipo come se fosse scritto su un cerchio, e che ruotasse insieme al cerchio.
+  - andrebbe fatto anche che gli archi della circonferenza arrivano molto più distanti, cioè c'è più roba
+  - il testo EDON e NODE lo vorrei normale e non in ASCII e lo vorrei che girasse attorno alla circonferenza, tipo come se fosse scritto su un cerchio, e che ruotasse insieme al cerchio.
 - [x] Quando passo sopra un tile con il mouse vorrei un effetto parallasse 3D, cioè il tile si muove leggermente in base alla posizione del mouse sopra di esso.
 - [x] Con sfondo scuro mettere testo bianco e con sfondo chiaro mettere testo nero, in modo automatico.
 - [x] Lo sfondo animato non funziona
@@ -36,8 +55,8 @@
 - [x] Tile del meteo
 - [x] Tenere premuto un tile per riposizionarlo
 - [x] 1 o 2 sfondi animati:
-    - [x] Cerchio in alto a sinistra che ruota, il cerchio è fatto di caratteri ASCII + la scritta EDON e NODE che si ripete all'infinito, il tutto con dithering.
-    - [x] perlin noise classico, dithering
+  - [x] Cerchio in alto a sinistra che ruota, il cerchio è fatto di caratteri ASCII + la scritta EDON e NODE che si ripete all'infinito, il tutto con dithering.
+  - [x] perlin noise classico, dithering
 - [x] Aggiungere tile con barre di avanzamento (esempio timer o promemoria di scadenza).
 - [x] Poter mostrare anche pdf tile.
 - [x] Poter fare drag e drop di file per metterli nel desktop a tile, e se il file è un PDF o un'immagine creare un tile che mostra l'anteprima del file.
@@ -59,8 +78,8 @@
 - [x] Una volta create le note o le todo devo poterle modificare, quindi aggiungere un pulsante per modificare le note e le todo.
 - [x] Aggiungere un pulsante per eliminare le note e le todo.
 - [x] Il pulsante per cercare nel desktop deve diventare un pulsante per chiedere all'agente ai tipo:
-    - "aggiungi un tile che mostra la nota del progetto X"
-    - "metti il tile dell'ora di New York"
-    - "Aggiungi un tile che mostra il meteo a Firenze"
-    - "Mostra un tile che si aggiorna giornalmente con le notizie di tecnologia"
-    - quindi i tile sono oggetti che possono essere modificati nel tempo in base a vari comandi
+  - "aggiungi un tile che mostra la nota del progetto X"
+  - "metti il tile dell'ora di New York"
+  - "Aggiungi un tile che mostra il meteo a Firenze"
+  - "Mostra un tile che si aggiorna giornalmente con le notizie di tecnologia"
+  - quindi i tile sono oggetti che possono essere modificati nel tempo in base a vari comandi

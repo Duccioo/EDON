@@ -202,16 +202,45 @@ export function Inspector({
         {tile.type === "folder" && (
           <fieldset>
             <legend>Contenuto</legend>
+            <label>
+              Cartella Vault Obsidian (opzionale)
+              <input
+                defaultValue={tile.config.vaultPath}
+                key={`${tile.id}-vault`}
+                placeholder="Vuoto = cartella normale, * = tutto il vault, o percorso"
+                onBlur={(e) => setConfig({ vaultPath: e.target.value.trim() })}
+              />
+              <small>
+                Usa <code>*</code> per aprire l’intero vault oppure il nome di
+                una sottocartella (es. <code>Progetti</code>).
+              </small>
+            </label>
             <p className="hint">
-              {(tile.config.children ?? []).length === 0
-                ? "La cartella è vuota."
-                : `${(tile.config.children ?? []).length} element${(tile.config.children ?? []).length === 1 ? "o" : "i"} organizzati qui dentro.`}{" "}
-              Aggiungi e modifica gli elementi aprendo la cartella.
+              {tile.config.vaultPath
+                ? "Questa cartella apre direttamente Esplora Vault."
+                : (tile.config.children ?? []).length === 0
+                  ? "La cartella è vuota."
+                  : `${(tile.config.children ?? []).length} element${(tile.config.children ?? []).length === 1 ? "o" : "i"} organizzati qui dentro.`}
             </p>
             {onOpenFolder && (
-              <button onClick={onOpenFolder}>Apri la cartella</button>
+              <button onClick={onOpenFolder}>
+                {tile.config.vaultPath
+                  ? "Esplora nel Vault"
+                  : "Apri la cartella"}
+              </button>
             )}
           </fieldset>
+        )}
+        {(tile.type === "text" || tile.type === "data") && (
+          <label>
+            File nel Vault Obsidian
+            <input
+              defaultValue={tile.config.vaultPath}
+              key={`${tile.id}-vault-note`}
+              placeholder="es. Note/Idea.md (automatico se il vault è attivo)"
+              onBlur={(e) => setConfig({ vaultPath: e.target.value.trim() })}
+            />
+          </label>
         )}
         {tile.type === "link" && (
           <label>
@@ -228,7 +257,8 @@ export function Inspector({
         {(tile.type === "link" ||
           tile.type === "image" ||
           tile.type === "file" ||
-          tile.type === "data") && (
+          tile.type === "data" ||
+          tile.type === "radio") && (
           <label>
             Destinazione
             <input
@@ -238,6 +268,64 @@ export function Inspector({
               onBlur={(e) => patch({ url: e.target.value })}
             />
           </label>
+        )}
+        {tile.type === "radio" && (
+          <label>
+            URL stream audio
+            <input
+              defaultValue={tile.config.body}
+              key={`${tile.id}-stream`}
+              placeholder="https://stream.rcs.revma.com/x3ab37sgn7uvv"
+              onBlur={(e) => setConfig({ body: e.target.value.trim() })}
+            />
+            <small>
+              Lascia predefinito per lo streaming ufficiale di DJ Osso Radio.
+            </small>
+          </label>
+        )}
+        {tile.type === "ai_limits" && (
+          <fieldset>
+            <legend>Subscription AI</legend>
+            <label>
+              Quote AI (Nome | % | Reset)
+              <textarea
+                rows={4}
+                defaultValue={tile.config.items
+                  .map((i) => i.text)
+                  .join("\n")}
+                key={`${tile.id}-${tile.config.items.map((i) => i.text).join("|")}`}
+                placeholder="Claude Max | 65% | Reset 5h"
+                onBlur={(e) =>
+                  setConfig({
+                    items: e.target.value
+                      .split("\n")
+                      .map((line) => line.trim())
+                      .filter(Boolean)
+                      .slice(0, 30)
+                      .map((text, i) => ({
+                        id: `ai-${i}`,
+                        done: false,
+                        text,
+                      })),
+                  })
+                }
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setConfig({
+                  items: tile.config.items.map((item) => ({
+                    ...item,
+                    done: false,
+                    text: item.text.replace(/\|\s*\d{1,3}\s*%/, "| 0%"),
+                  })),
+                })
+              }
+            >
+              Azzera tutte le quote
+            </button>
+          </fieldset>
         )}
         {(tile.type === "text" ||
           tile.type === "data" ||

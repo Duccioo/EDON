@@ -2,31 +2,33 @@ import { z } from "zod";
 import type { Store } from "./store";
 import { TileError } from "./tiles";
 
-export type AgentEnv = { url?: string; apiKey?: string; model?: string };
-
-const SYSTEM_PROMPT = `You are connected to the user's EDON tile desktop through the MCP server "edon". Fulfil the request by creating or updating tiles with its tools. Use list_tile_types to learn the available fields. For content that changes over time use upsert_tile with a stable key (for example "weather-florence" or "daily-tech-news") so the same tile is updated instead of duplicated. Never delete or move tiles the user created. If the request is recurring, schedule it with your own scheduler when you have one. Reply with one short sentence, in the user's language, saying what you did.`;
-
+export type AgentEnv = {
+  url?: string;
+  apiKey?: string;
+  model?: string;
+};
 export const agentSettingsInput = z.object({
   url: z
     .string()
     .trim()
-    .max(300)
-    .refine(
-      (v) => !v || /^https?:\/\/[^\s]+$/.test(v),
-      "Usa un URL http o https.",
-    ),
-  model: z.string().trim().max(100),
-  apiKey: z.string().max(500).optional(),
+    .max(500)
+    .refine((v) => !v || /^https?:\/\/[^\s"'<>\\]+$/.test(v), "URL non valido.")
+    .transform((v) => v.replace(/\/+$/, "")),
+  apiKey: z.string().trim().max(500).optional(),
+  model: z.string().trim().max(120).default("hermes-agent"),
 });
+export const agentAskInput = z.object({
+  prompt: z.string().trim().min(1).max(2000),
+});
+const systemPrompt =
+  "Aiuti l’utente a organizzare il suo desktop EDON. Usa gli strumenti MCP di EDON (list_tiles, get_layout, list_tile_types, create_tile, update_tile, upsert_tile, delete_tile, list_vault_notes, read_vault_note) per creare o aggiornare le tile richieste o per cercare e fissare sul desktop le note dal vault di Obsidian (passando config.vaultPath). Rispondi in italiano, in una o due frasi sobrie.";
 
-/** Connection to an external agent (Hermes) that speaks the OpenAI chat API. */
 export class AgentClient {
   constructor(
     private store: Store,
-    private env: AgentEnv,
-    private fetchImpl: typeof fetch,
+    private env: AgentEnv = {},
+    private fetchFn: typeof fetch = fetch,
   ) {}
-
   private resolved() {
     const saved = this.store.getSetting("agent");
     const ui: AgentEnv = saved ? JSON.parse(saved) : {};
@@ -36,7 +38,6 @@ export class AgentClient {
       model: this.env.model || ui.model || "hermes-agent",
     };
   }
-  /** Public view: never includes the key. */
   status() {
     const c = this.resolved();
     return {
@@ -52,80 +53,76 @@ export class AgentClient {
     };
   }
   save(input: z.infer<typeof agentSettingsInput>) {
-    const old = this.store.getSetting("agent");
-    const previous: AgentEnv = old ? JSON.parse(old) : {};
+    const parsed = agentSettingsInput.parse(input);
+    const current = this.store.getSetting("agent");
+    const old: AgentEnv = current ? JSON.parse(current) : {};
     this.store.setSetting(
       "agent",
       JSON.stringify({
-        url: input.url,
-        model: input.model,
-        apiKey: input.apiKey === undefined ? previous.apiKey : input.apiKey,
+        url: parsed.url,
+        model: parsed.model || "hermes-agent",
+        apiKey: parsed.apiKey !== undefined ? parsed.apiKey : old.apiKey || "",
       }),
     );
     return this.status();
   }
-  private async call(path: string, init: RequestInit, timeoutMs: number) {
+  async test() {
     const c = this.resolved();
     if (!c.url)
-      throw new TileError(
-        409,
-        "Collega prima l’agente in Impostazioni → Agente.",
-      );
-    let response: Response;
-    try {
-      response = await this.fetchImpl(`${c.url}${path}`, {
-        ...init,
-        headers: {
-          "Content-Type": "application/json",
-          ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}),
-        },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch (e) {
-      throw new TileError(
-        502,
-        (e as Error).name === "TimeoutError"
-          ? "L’agente non ha risposto in tempo."
-          : "Impossibile raggiungere l’agente. Controlla indirizzo e rete.",
-      );
-    }
-    return response;
-  }
-  async test() {
-    const response = await this.call("/health", { method: "GET" }, 8000);
-    if (!response.ok)
-      throw new TileError(
-        502,
-        `L’agente ha risposto con errore ${response.status}.`,
-      );
+      throw new TileError(409, "Imposta prima l’indirizzo di Hermes.");
+    const res = await this.call(`${c.url}/health`, {
+      headers: this.headers(c.apiKey),
+    });
+    if (!res.ok)
+      throw new TileError(502, `Hermes ha risposto con stato ${res.status}.`);
     return { ok: true };
   }
   async ask(prompt: string) {
     const c = this.resolved();
-    const response = await this.call(
-      "/v1/chat/completions",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          model: c.model,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt },
-          ],
-        }),
+    if (!c.url)
+      throw new TileError(
+        409,
+        "Configura Hermes in Impostazioni → Agente AI prima di creare una tile.",
+      );
+    const res = await this.call(`${c.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...this.headers(c.apiKey),
       },
-      180000,
-    );
-    if (response.status === 401 || response.status === 403)
-      throw new TileError(502, "L’agente ha rifiutato la chiave API.");
-    if (!response.ok)
+      body: JSON.stringify({
+        model: c.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+    if (!res.ok)
       throw new TileError(
         502,
-        `L’agente ha risposto con errore ${response.status}.`,
+        `Hermes ha risposto con stato ${res.status}. Controlla indirizzo, chiave e server MCP.`,
       );
-    const data = (await response.json().catch(() => null)) as {
+    const body = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
-    } | null;
-    return { reply: data?.choices?.[0]?.message?.content?.trim() || "Fatto." };
+    };
+    const reply = body.choices?.[0]?.message?.content?.trim();
+    return { reply: reply || "Fatto." };
+  }
+  private headers(apiKey: string): Record<string, string> {
+    return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+  }
+  private async call(url: string, init: RequestInit) {
+    try {
+      return await this.fetchFn(url, {
+        ...init,
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch {
+      throw new TileError(
+        502,
+        "Impossibile raggiungere Hermes. Verifica che il server sia attivo sulla rete locale.",
+      );
+    }
   }
 }

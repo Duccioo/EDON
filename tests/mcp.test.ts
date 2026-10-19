@@ -40,6 +40,8 @@ test("MCP tools use the same tile service as the REST API", async () => {
       "get_layout",
       "list_tile_types",
       "list_tiles",
+      "list_vault_notes",
+      "read_vault_note",
       "update_tile",
       "upsert_tile",
     ]);

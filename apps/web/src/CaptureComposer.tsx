@@ -37,13 +37,19 @@ export function CaptureComposer({
   const currentBody = useRef(body);
   currentBody.current = body;
   const link = detectLinks && kind === "text" ? captureLink(body) : null;
+  const lastNewline = !compact ? body.lastIndexOf("\n") : -1;
+  const completedMarkdown =
+    lastNewline >= 0 ? body.slice(0, lastNewline).trimEnd() : "";
+  const committedLinesCount =
+    lastNewline >= 0 ? body.slice(0, lastNewline).split("\n").length : 0;
+
   useLayoutEffect(() => {
     if (!mirror.current) return;
     const measure = () =>
       setHeight(
         Math.max(
-          compact ? 24 : 180,
-          Math.min(compact ? 224 : 360, mirror.current!.scrollHeight),
+          compact ? 24 : 160,
+          Math.min(compact ? 224 : 340, mirror.current!.scrollHeight),
         ),
       );
     const observer = new ResizeObserver(measure);
@@ -72,7 +78,7 @@ export function CaptureComposer({
         )
           throw new Error("Scegli un’immagine PNG, JPEG, WebP o GIF.");
         const url = await upload(file);
-        const alt = file.name.replace(/[\[\]\\\r\n]/g, "").slice(0, 100);
+        const alt = file.name.replace(/[\]\\/\r\n]/g, "").slice(0, 100);
         const next = `${currentBody.current}${currentBody.current ? "\n\n" : ""}![${alt}](${url})`;
         if (next.length > 10000)
           throw new Error(
@@ -138,18 +144,43 @@ export function CaptureComposer({
           />
         </label>
       )}
+      {!compact && !preview && completedMarkdown && (
+        <div
+          key={committedLinesCount}
+          className="composer-live-markdown"
+          aria-label="Rendering Markdown in tempo reale"
+          title="Doppio clic per posizionarti nel testo"
+          onDoubleClick={() => input.current?.focus()}
+        >
+          <span className="composer-live-badge">
+            Markdown renderizzato ({committedLinesCount}{" "}
+            {committedLinesCount === 1 ? "riga" : "righe"})
+          </span>
+          <MarkdownContent text={completedMarkdown} />
+        </div>
+      )}
       <div className="composer-writing">
         {preview ? (
-          <div className="composer-preview">
+          <div
+            className="composer-preview"
+            onDoubleClick={() => {
+              setPreview(false);
+              setTimeout(() => input.current?.focus(), 0);
+            }}
+          >
             <MarkdownContent text={body} />
           </div>
         ) : (
           <div className="composer-input-wrap">
             <textarea
-              autoFocus
+              autoFocus={!compact}
               ref={input}
               aria-label={compact ? "Appunta qualcosa" : "Contenuto Markdown"}
-              placeholder="Appunta qualcosa…"
+              placeholder={
+                compact
+                  ? "Appunta qualcosa…"
+                  : "Scrivi in Markdown… (vai a capo con Invio per renderizzare)"
+              }
               maxLength={10000}
               rows={1}
               style={{ height }}
@@ -231,7 +262,7 @@ export function CaptureComposer({
               ? "Carico l’immagine…"
               : link
                 ? "Diventerà un collegamento · ⌘ / Ctrl + Invio"
-                : "Markdown · ⌘ / Ctrl + Invio"}
+                : "Invio renderizza la riga · ⌘ / Ctrl + Invio salva"}
           </span>
           <button
             className="composer-save"

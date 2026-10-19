@@ -15,6 +15,7 @@ import {
   type Tile,
 } from "../../../packages/shared/model";
 import type { Store } from "./store";
+import type { VaultService } from "./vault";
 
 export class TileError extends Error {
   constructor(
@@ -76,19 +77,21 @@ export const layoutInput = z
 export const tileTypeDocs = [
   {
     type: "text",
-    description: "Nota di testo. Il contenuto è in config.body (max 10000).",
-    fields: ["title", "subtitle", "config.body", "url"],
+    description:
+      "Nota di testo. Il contenuto è in config.body (max 10000). Se il vault di Obsidian è attivo, config.vaultPath collega la tile a un file .md del vault.",
+    fields: ["title", "subtitle", "config.body", "config.vaultPath", "url"],
     sizes: "larghezza 1–3, altezza 1–128 (entro le righe del desktop)",
   },
   {
     type: "data",
     description:
-      "Tile di dati: testo in config.body ed elenco di voci spuntabili in config.items (max 30, ognuna {id,text,done}). Adatta a riepiloghi, meteo, notizie, riunioni.",
+      "Tile di dati: testo in config.body ed elenco di voci spuntabili in config.items (max 30, ognuna {id,text,done}). Sincronizzata con config.vaultPath nel vault di Obsidian se attivo.",
     fields: [
       "title",
       "subtitle",
       "config.body",
       "config.items",
+      "config.vaultPath",
       "config.icon",
       "config.image",
       "url",
@@ -118,8 +121,8 @@ export const tileTypeDocs = [
   {
     type: "folder",
     description:
-      "Cartella: contiene fino a 24 mini-tile (link, image, text, data, clock) in config.children, ognuna con id, type, title, subtitle, url, config e appearance. Le cartelle non si annidano.",
-    fields: ["title", "subtitle", "config.children"],
+      "Cartella: contiene fino a 24 mini-tile in config.children oppure punta a una cartella del vault di Obsidian (config.vaultPath: '*' per l'intero vault o percorso relativo della cartella).",
+    fields: ["title", "subtitle", "config.children", "config.vaultPath"],
     sizes: "1×1 … 2×2",
   },
   {
@@ -142,6 +145,27 @@ export const tileTypeDocs = [
       "File caricato dall'utente (PDF con anteprima, altri formati come download). Gli agenti non possono caricare file: config.file è un percorso /uploads/… già esistente.",
     fields: ["title", "subtitle", "config.file"],
     sizes: "1×1 … 3×3",
+  },
+  {
+    type: "performance",
+    description:
+      "Monitoraggio prestazioni di sistema in tempo reale (CPU, RAM, disco, carico e uptime del server).",
+    fields: ["title", "subtitle"],
+    sizes: "1×1 … 2×2",
+  },
+  {
+    type: "ai_limits",
+    description:
+      "Tracciatore di limiti e quote Subscription AI (Claude, ChatGPT, Cursor, OpenRouter/Hermes). Ogni voce in config.items ha il formato 'Nome | NN% | Reset/Nota'.",
+    fields: ["title", "subtitle", "config.items", "config.body"],
+    sizes: "1×1 … 2×2",
+  },
+  {
+    type: "radio",
+    description:
+      "Player radio streaming in diretta (preconfigurato per DJ Osso Radio). L'URL dello stream audio è in config.body e il sito della radio in url.",
+    fields: ["title", "subtitle", "config.body", "url"],
+    sizes: "1×1 … 2×2",
   },
 ].map((t) => ({
   ...t,
@@ -234,18 +258,28 @@ const purge = (desktop: Desktop, now = Date.now()) => {
 
 /** Operations shared by the REST API and the MCP server. */
 export class TileService {
-  constructor(private store: Store) {}
+  constructor(
+    private store: Store,
+    private vault?: VaultService,
+  ) {}
 
-  /** The desktop, after dropping tiles whose expiry has passed. */
+  /** The desktop, after dropping tiles whose expiry has passed and syncing linked Vault files. */
   snapshot(): Snapshot {
     const current = this.store.get();
-    if (
-      !current.tiles.some(
-        (t) => t.expiresAt && Date.parse(t.expiresAt) <= Date.now(),
-      )
-    )
-      return current;
-    return this.store.mutate(purge).snapshot;
+    const hasExpired = current.tiles.some(
+      (t) => t.expiresAt && Date.parse(t.expiresAt) <= Date.now(),
+    );
+    const synced = this.vault?.syncFromDisk(current) ?? false;
+    if (!hasExpired && !synced) return current;
+    return this.store.mutate((d) => {
+      purge(d);
+      this.vault?.syncFromDisk(d);
+    }).snapshot;
+  }
+  saveDesktop(next: Desktop, expectedRevision?: number): Snapshot {
+    const previous = this.store.get();
+    this.vault?.syncToDisk(previous, next);
+    return this.store.save(next, expectedRevision ?? previous.revision);
   }
   list(): Tile[] {
     return this.snapshot().tiles;
@@ -257,15 +291,21 @@ export class TileService {
   }
   create(input: CreateInput): Tile {
     return this.store.mutate((desktop) => {
+      const previous = structuredClone(desktop);
       purge(desktop);
-      return this.insert(desktop, createInput.parse(input));
+      const created = this.insert(desktop, createInput.parse(input));
+      this.vault?.syncToDisk(previous, desktop);
+      return desktop.tiles.find((t) => t.id === created.id) ?? created;
     }).result;
   }
   update(id: string, input: PatchInput): Tile {
     patchInput.parse(input);
     return this.store.mutate((desktop) => {
+      const previous = structuredClone(desktop);
       purge(desktop);
-      return this.change(desktop, id, input);
+      const updated = this.change(desktop, id, input);
+      this.vault?.syncToDisk(previous, desktop);
+      return desktop.tiles.find((t) => t.id === updated.id) ?? updated;
     }).result;
   }
   /** Idempotent: updates the tile carrying this key, or creates it. */
@@ -273,6 +313,7 @@ export class TileService {
     externalKeySchema.parse(key);
     upsertInput.parse(input);
     return this.store.mutate((desktop) => {
+      const previous = structuredClone(desktop);
       purge(desktop);
       const existing = desktop.tiles.find((t) => t.externalKey === key);
       if (existing) {
@@ -282,25 +323,30 @@ export class TileService {
             `La tile con chiave “${key}” è di tipo ${existing.type}; eliminala per cambiarne il tipo.`,
           );
         const { type: _type, ...rest } = input;
+        const updated = this.change(desktop, existing.id, rest);
+        this.vault?.syncToDisk(previous, desktop);
         return {
-          tile: this.change(desktop, existing.id, rest),
+          tile: desktop.tiles.find((t) => t.id === updated.id) ?? updated,
           created: false,
         };
       }
       if (!input.type)
         throw new TileError(400, "Per creare la tile serve il campo type.");
+      const created = this.insert(desktop, {
+        ...input,
+        type: input.type,
+        externalKey: key,
+      });
+      this.vault?.syncToDisk(previous, desktop);
       return {
-        tile: this.insert(desktop, {
-          ...input,
-          type: input.type,
-          externalKey: key,
-        }),
+        tile: desktop.tiles.find((t) => t.id === created.id) ?? created,
         created: true,
       };
     }).result;
   }
   remove(id: string): void {
     this.store.mutate((desktop) => {
+      const previous = structuredClone(desktop);
       purge(desktop);
       const tile = desktop.tiles.find((t) => t.id === id);
       if (!tile) throw new TileError(404, "Tile non trovata.");
@@ -310,6 +356,7 @@ export class TileService {
           "Gli agenti possono eliminare solo le tile create da un agente.",
         );
       desktop.tiles = desktop.tiles.filter((t) => t.id !== id);
+      this.vault?.syncToDisk(previous, desktop);
     });
   }
   layout() {

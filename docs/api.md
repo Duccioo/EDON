@@ -2,17 +2,17 @@
 
 Questa interfaccia serve il browser. Autenticazione con cookie `session`, HttpOnly e SameSite=Strict, durata sette giorni. Nessun token per agenti in questa fase. Risposte di errore JSON: `{ "error": "messaggio" }`.
 
-| Metodo | Percorso | Comportamento |
-| --- | --- | --- |
-| GET | `/api/auth` | Restituisce `configured` e `authenticated` |
-| POST | `/api/setup` | Imposta la prima password, solo se non configurata |
-| POST | `/api/login` | Verifica password e crea una sessione |
-| POST | `/api/logout` | Invalida la sessione |
-| POST | `/api/password` | Cambia la password (`{current, password}`), autenticato, max 8 tentativi/minuto |
-| GET | `/api/desktop` | Desktop completo con `revision` |
-| PUT | `/api/desktop` | Valida e salva desktop e revisione |
-| POST | `/api/uploads` | Un file multipart, massimo 10 MB |
-| GET | `/uploads/:name` | Restituisce il file a un utente autenticato |
+| Metodo | Percorso         | Comportamento                                                                   |
+| ------ | ---------------- | ------------------------------------------------------------------------------- |
+| GET    | `/api/auth`      | Restituisce `configured` e `authenticated`                                      |
+| POST   | `/api/setup`     | Imposta la prima password, solo se non configurata                              |
+| POST   | `/api/login`     | Verifica password e crea una sessione                                           |
+| POST   | `/api/logout`    | Invalida la sessione                                                            |
+| POST   | `/api/password`  | Cambia la password (`{current, password}`), autenticato, max 8 tentativi/minuto |
+| GET    | `/api/desktop`   | Desktop completo con `revision`                                                 |
+| PUT    | `/api/desktop`   | Valida e salva desktop e revisione                                              |
+| POST   | `/api/uploads`   | Un file multipart, massimo 10 MB                                                |
+| GET    | `/uploads/:name` | Restituisce il file a un utente autenticato                                     |
 
 Login e setup accettano `{ "password": "…" }` e hanno un limite di tentativi. Le altre operazioni richiedono la sessione. Per esempio, dopo aver configurato la password nel browser:
 
@@ -26,20 +26,19 @@ curl -b /tmp/edon-cookie http://127.0.0.1:3001/api/desktop
 
 I campi sono validati sul server, inclusi dimensioni, limiti, duplicati e sovrapposizioni. Note (`text`) e TODO (`data`) arrivano a 3 colonne e 128 righe, entro le dimensioni del desktop; i file (`file`) arrivano a 3×3; gli altri tipi a 2×2. Il documento desktop include `archive` (massimo 1.000 note/TODO), preservato da salvataggi e backup; gli ID devono essere unici anche tra desktop e archivio. URL di destinazione ammessi: HTTP, HTTPS e Obsidian. Immagini remote: HTTPS; quelle caricate vengono servite dal server. Errori di validazione: `400`, accesso mancante: `401`, origine non consentita: `403`, file oltre il limite: `413`.
 
-
 ## API per agenti
 
 Gli agenti esterni (Hermes, Codex, script) usano `Authorization: Bearer <token>`. I token si creano in **Impostazioni globali → Agenti** (mostrati una sola volta, con scadenza e revoca) oppure si imposta `EDON_AGENT_TOKEN` nell'ambiente. Il token apre **solo** i percorsi qui sotto; non dà accesso a `/api/desktop`, `/api/tokens` né agli upload. Se Hermes gira su un'altra macchina, esponi EDON con HTTPS o VPN.
 
-| Metodo | Percorso | Comportamento |
-| --- | --- | --- |
-| GET | `/api/tiles` | `{ tiles }` |
-| POST | `/api/tiles` | Crea (201). `type` obbligatorio |
-| GET / PATCH / DELETE | `/api/tiles/:id` | Legge, aggiorna, elimina |
-| PUT | `/api/tiles/by-key/:key` | Upsert idempotente: 201 se crea, 200 se aggiorna |
-| GET | `/api/tile-types` | Tipi di tile, campi e aspetto |
-| GET | `/api/layout` | Colonne (6), revisione, posizioni |
-| PUT | `/api/layout` | `{ tiles: [{id,x,y}] }`: sposta solo tile create da agenti |
+| Metodo               | Percorso                 | Comportamento                                              |
+| -------------------- | ------------------------ | ---------------------------------------------------------- |
+| GET                  | `/api/tiles`             | `{ tiles }`                                                |
+| POST                 | `/api/tiles`             | Crea (201). `type` obbligatorio                            |
+| GET / PATCH / DELETE | `/api/tiles/:id`         | Legge, aggiorna, elimina                                   |
+| PUT                  | `/api/tiles/by-key/:key` | Upsert idempotente: 201 se crea, 200 se aggiorna           |
+| GET                  | `/api/tile-types`        | Tipi di tile, campi e aspetto                              |
+| GET                  | `/api/layout`            | Colonne (6), revisione, posizioni                          |
+| PUT                  | `/api/layout`            | `{ tiles: [{id,x,y}] }`: sposta solo tile create da agenti |
 
 Regole:
 

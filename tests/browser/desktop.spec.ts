@@ -1042,3 +1042,89 @@ test("circular wallpaper reuses its lettering between animation frames", async (
   expect(counts.after).toBe(counts.before);
   await page.screenshot({ path: "test-results/circular-wallpaper.png" });
 });
+
+test("performance, AI limits, DJ Osso Radio tiles, quick keybindings, double-click note edit with Enter markdown, and non-overlapping capture bar", async ({
+  page,
+}) => {
+  // Expand grid to 8x5 so there is plenty of space for all new tiles
+  const initial = await (await page.request.get("/api/desktop")).json();
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: {
+          ...initial,
+          settings: { ...initial.settings, columns: 8, rows: 5, maxTiles: 24 },
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
+
+  // 1. Keybinding "?" opens keyboard shortcuts modal
+  await page.keyboard.press("?");
+  const shortcutsModal = page.getByRole("dialog", {
+    name: "Scorciatoie da tastiera",
+  });
+  await expect(shortcutsModal).toBeVisible();
+  await expect(shortcutsModal.getByText("Nuova nota Markdown")).toBeVisible();
+  await shortcutsModal.getByRole("button", { name: "Chiudi" }).click();
+
+  // 2. Add Performance, Subscription AI limits, and DJ Osso Radio tiles via "a" shortcut
+  await page.keyboard.press("a");
+  await page.getByRole("button", { name: /Prestazioni/ }).click();
+  await expect(page.getByTestId("tile-performance")).toBeVisible();
+  await expect(page.getByTestId("tile-performance")).toContainText(/CPU/);
+  await expect(page.getByTestId("tile-performance")).toContainText(/RAM/);
+  await page.getByRole("button", { name: "Fine", exact: true }).click();
+
+  await page.keyboard.press("a");
+  await page.getByRole("button", { name: /Subscription AI limits/ }).click();
+  const aiTile = page.getByTestId("tile-ai_limits");
+  await expect(aiTile).toBeVisible();
+  await expect(aiTile).toContainText("Claude Max");
+  await page.getByRole("button", { name: "Fine", exact: true }).click();
+  // Clicking a quota row in normal mode increments its percentage
+  await aiTile.getByRole("button", { name: /Aggiorna quota Claude Max/ }).click();
+  await expect(aiTile).toContainText("75%");
+
+  await page.keyboard.press("a");
+  await page.getByRole("button", { name: /DJ Osso Radio/ }).click();
+  const radioTile = page.getByTestId("tile-radio");
+  await expect(radioTile).toBeVisible();
+  await expect(radioTile).toContainText("DJ Osso Radio");
+  await page.getByRole("button", { name: "Fine", exact: true }).click();
+  await expect(
+    radioTile.getByRole("button", { name: "Ascolta DJ Osso Radio" }),
+  ).toBeVisible();
+
+  // 3. Double-click on a note tile opens the Note Editor directly in SideWorkspace,
+  //    renders Markdown on Enter, and does not overlap the capture bar or "+" button
+  await capture(page, "Nota doppio clic", "Prima riga");
+  const noteTile = page
+    .getByTestId("tile-text")
+    .filter({ hasText: "Nota doppio clic" });
+  await noteTile.locator("article").dblclick();
+  const sideDialog = page.getByRole("dialog", { name: "Modifica" });
+  await expect(sideDialog).toBeVisible();
+
+  const mdInput = sideDialog.getByRole("textbox", {
+    name: "Contenuto Markdown",
+  });
+  await mdInput.fill("# Titolo Live\nSeconda riga in corso");
+  const liveRender = sideDialog.getByLabel(
+    "Rendering Markdown in tempo reale",
+  );
+  await expect(liveRender).toBeVisible();
+  await expect(liveRender.locator("h1")).toHaveText("Titolo Live");
+
+  // Verify the capture bar ("Appunta qualcosa") and "+" button ("Altre azioni") do not overlap each other or the side editor
+  const plusBox = (await page
+    .getByRole("button", { name: "Altre azioni" })
+    .boundingBox())!;
+  const captureBox = (await page
+    .locator(".capture-tools .capture-bar")
+    .boundingBox())!;
+  const sideBox = (await sideDialog.boundingBox())!;
+  expect(plusBox.x + plusBox.width).toBeLessThanOrEqual(captureBox.x + 2);
+  expect(captureBox.x + captureBox.width).toBeLessThanOrEqual(sideBox.x + 2);
+});

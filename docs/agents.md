@@ -50,7 +50,7 @@ API_SERVER_KEY=una-chiave-lunga
 # per raggiungerlo da un'altra macchina, vedi l'host del gateway nella documentazione di Hermes
 ```
 
-poi `hermes gateway` (porta predefinita 8642). In EDON, **Impostazioni globali → Agente AI**: indirizzo (`http://host:8642`), chiave API e modello (`hermes-agent`); *Verifica connessione* controlla `/health`. Nello stack Docker usa `HERMES_URL`, `HERMES_API_KEY` e `HERMES_MODEL`: se presenti prevalgono sulle impostazioni salvate. La chiave salvata dall'interfaccia sta in chiaro nel database `data/desktop.sqlite`, come il resto della configurazione.
+poi `hermes gateway` (porta predefinita 8642). In EDON, **Impostazioni globali → Agente AI**: indirizzo (`http://host:8642`), chiave API e modello (`hermes-agent`); _Verifica connessione_ controlla `/health`. Nello stack Docker usa `HERMES_URL`, `HERMES_API_KEY` e `HERMES_MODEL`: se presenti prevalgono sulle impostazioni salvate. La chiave salvata dall'interfaccia sta in chiaro nel database `data/desktop.sqlite`, come il resto della configurazione.
 
 Perché Hermes possa creare le tile, deve avere EDON come server MCP (sezione sopra) con un token proprio. Le richieste lunghe (ricerca di notizie, più passaggi) possono impiegare fino a tre minuti prima del timeout.
 

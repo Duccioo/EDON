@@ -1,4 +1,5 @@
 # PROJECT: Personal Desktop
+
 ## A self-hosted, customizable, agent-native personal homepage
 
 You are a senior full-stack engineer and UI/UX designer.
@@ -27,6 +28,7 @@ productivity dashboard.
 The application is primarily intended for personal use.
 
 It is NOT intended to replace:
+
 - Obsidian
 - Paperclip
 - Notion
@@ -60,7 +62,7 @@ However, this MVP must remain focused and manageable.
 Core philosophy:
 
 "Anything can become a tile.
- Anything can update a tile."
+Anything can update a tile."
 
 ---
 
@@ -472,17 +474,17 @@ Implement a small, documented JSON API.
 
 Suggested endpoints:
 
-GET    /api/tiles
-POST   /api/tiles
-GET    /api/tiles/:id
-PATCH  /api/tiles/:id
+GET /api/tiles
+POST /api/tiles
+GET /api/tiles/:id
+PATCH /api/tiles/:id
 DELETE /api/tiles/:id
 
-PUT    /api/tiles/by-key/:key
+PUT /api/tiles/by-key/:key
 
-GET    /api/tile-types
-GET    /api/layout
-PUT    /api/layout
+GET /api/tile-types
+GET /api/layout
+PUT /api/layout
 
 The exact API structure may be refined.
 
@@ -730,6 +732,7 @@ Keep the system lightweight.
 Preferred stack:
 
 Frontend:
+
 - React
 - TypeScript
 - Vite
@@ -737,19 +740,23 @@ Frontend:
 - A mature draggable/resizable grid library
 
 Backend:
+
 - Node.js
 - TypeScript
 - Fastify or equivalent lightweight framework
 
 Database:
+
 - SQLite
 - Lightweight ORM or typed database layer
 
 Agent integration:
+
 - REST
 - MCP TypeScript SDK
 
 Deployment:
+
 - Docker
 - Docker Compose
 
@@ -758,13 +765,13 @@ Use a simple monorepo structure if useful.
 Suggested structure:
 
 /
-  apps/
-    web/
-    server/
-  packages/
-    shared/
-  docker-compose.yml
-  README.md
+apps/
+web/
+server/
+packages/
+shared/
+docker-compose.yml
+README.md
 
 Feel free to adjust the structure if there
 is a clear technical justification.

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, type CSSProperties } from "react";
 import {
   ArrowUpRight,
+  BookOpen,
   Check,
   Image as ImageIcon,
   ListTodo,
@@ -8,7 +9,14 @@ import {
   StickyNote,
 } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent";
-import { FileTile, ProgressTile, WeatherTile } from "./ExtraTiles";
+import {
+  AiLimitsTile,
+  FileTile,
+  PerformanceTile,
+  ProgressTile,
+  RadioTile,
+  WeatherTile,
+} from "./ExtraTiles";
 import {
   readableInk,
   type Desktop,
@@ -93,6 +101,12 @@ export function TileView({
   if (tile.type === "clock") return <Clock tile={tile} />;
   if (tile.type === "folder") return <FolderPreview tile={tile} />;
   if (tile.type === "weather") return <WeatherTile tile={tile} />;
+  if (tile.type === "performance") return <PerformanceTile tile={tile} />;
+  if (tile.type === "ai_limits")
+    return (
+      <AiLimitsTile tile={tile} editing={editing} onConfig={updateConfig} />
+    );
+  if (tile.type === "radio") return <RadioTile tile={tile} editing={editing} />;
   if (tile.type === "progress")
     return (
       <ProgressTile
@@ -153,7 +167,12 @@ export function TileView({
       <>
         <div className="note-meta">
           <StickyNote size={14} aria-hidden="true" />
-          <span>{tile.subtitle || "Nota personale"}</span>
+          <span>
+            {tile.subtitle ||
+              (tile.config.vaultPath
+                ? `Vault · ${tile.config.vaultPath}`
+                : "Nota personale")}
+          </span>
           {expanded && (
             <span className="note-date">
               {new Intl.DateTimeFormat("it-IT", {
@@ -174,7 +193,9 @@ export function TileView({
         <span>
           {tile.config.items.length
             ? `${tile.config.items.filter((i) => !i.done).length} da fare`
-            : "La tua lista"}
+            : tile.config.vaultPath
+              ? `Vault · ${tile.config.vaultPath}`
+              : "La tua lista"}
         </span>
         <span
           className="todo-count"
@@ -242,6 +263,27 @@ const folderGlyph: Record<string, string> = {
 };
 
 function FolderPreview({ tile }: { tile: Tile }) {
+  const vaultFolder = tile.config.vaultPath;
+  if (vaultFolder) {
+    return (
+      <>
+        <div className="tile-top">
+          <span>{tile.subtitle || "Vault Obsidian"}</span>
+          <BookOpen size={15} aria-hidden="true" />
+        </div>
+        <h2 className="folder-title">{tile.title}</h2>
+        <div className="folder-preview" aria-hidden="true">
+          <span className="folder-empty">
+            {vaultFolder === "*" ? "Tutte le note .md" : vaultFolder}
+          </span>
+        </div>
+        <div className="folder-bottom">
+          <span>Esplora nel vault</span>
+          <ArrowUpRight size={16} />
+        </div>
+      </>
+    );
+  }
   const kids = tile.config.children ?? [];
   return (
     <>
