@@ -46,8 +46,13 @@ export function DesktopTools({
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const observer = new ResizeObserver(() => {
-      if (ref.current)
-        onHeightChange(ref.current.getBoundingClientRect().height);
+      if (ref.current) {
+        // Reserve only the compact resting height so multi-line typing overlays the bottom
+        // instead of shrinking the desktop grid at the top.
+        onHeightChange(
+          Math.min(64, Math.round(ref.current.getBoundingClientRect().height)),
+        );
+      }
     });
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
@@ -64,7 +69,7 @@ export function DesktopTools({
             <button
               onClick={onCompact}
               aria-label="Compatta tile"
-              title="Compatta tile (C)"
+              title="Compatta tile"
             >
               <Minimize2 size={18} />
             </button>

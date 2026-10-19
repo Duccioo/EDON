@@ -53,6 +53,7 @@ import {
 } from "../../../packages/shared/model";
 import { request, uploadFile, useDesktop, type UploadedFile } from "./api";
 import { AnimatedWallpaper } from "./AnimatedWallpaper";
+import { colorPresets } from "./ColorPalette";
 import { useDesktopInk } from "./ink";
 import { fitBoard } from "../../../packages/shared/board";
 import { TileView, tileStyle, QuickAppend } from "./TileView";
@@ -169,19 +170,34 @@ function Login({
 }
 
 const KEYBOARD_SHORTCUTS = [
-  ["N", "Nuova nota Markdown"],
-  ["T", "Nuova lista TODO"],
-  ["A / +", "Catalogo per aggiungere una tile"],
-  ["V", "Apri o chiudi il Vault Obsidian"],
+  ["Qualsiasi tasto", "Inizia subito a scrivere nella barra e scegli cosa aggiungere"],
   ["E", "Attiva o termina la modalità modifica"],
-  ["C", "Compatta le tile eliminando gli spazi vuoti"],
-  ["D", "Sposta il pannello laterale a sinistra o destra"],
-  ["/ oppure ⌘K", "Scrivi subito nella barra Appunta qualcosa"],
-  ["S", "Apri le impostazioni"],
-  ["?", "Mostra le scorciatoie da tastiera"],
-  ["Doppio clic", "Modifica al volo una nota (sul desktop o aperta)"],
+  ["+", "Catalogo per aggiungere una tile"],
+  ["? ", "Mostra le scorciatoie da tastiera"],
+  ["⌘K", "Porta il cursore nella barra Appunta qualcosa"],
   ["Esc", "Chiudi pannello o esci dalla modifica"],
 ] as const;
+
+function appendToCaptureInput(text: string) {
+  const captureInput = document.querySelector<HTMLTextAreaElement>(
+    '.capture-bar textarea[aria-label="Appunta qualcosa"]',
+  );
+  if (!captureInput) return false;
+  captureInput.focus();
+  const nextVal = captureInput.value + text;
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
+  if (setter) {
+    setter.call(captureInput, nextVal);
+  } else {
+    captureInput.value = nextVal;
+  }
+  captureInput.dispatchEvent(new Event("input", { bubbles: true }));
+  captureInput.setSelectionRange(nextVal.length, nextVal.length);
+  return true;
+}
 
 function DesktopApp({ onLogout }: { onLogout: () => void }) {
   const { desktop, update, status, error, retry, refresh } = useDesktop();
@@ -217,6 +233,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       ? "left"
       : "right",
   );
+  const [sideWidth, setSideWidth] = useState<number | undefined>();
   const changeDockSide = useCallback((next: "left" | "right") => {
     setDockSide(next);
     try {
@@ -249,21 +266,12 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     folderHover.current = null;
     setFolderTarget(null);
   };
-  useEffect(
-    () => () => {
-      if (folderHover.current) clearTimeout(folderHover.current.timer);
-    },
-    [],
-  );
-  const [gridEpoch, setGridEpoch] = useState(0);
   const [deleting, setDeleting] = useState<Tile | null>(null);
   const [notice, setNotice] = useState("");
-  const onTimerFinish = useCallback(
-    (title: string) => setNotice(`“${title}” è finito.`),
-    [],
-  );
-  const [dockHeight, setDockHeight] = useState(64);
-  const viewport = useRef<HTMLElement>(null);
+  const [gridEpoch, setGridEpoch] = useState(0);
+  const [dockHeight, setDockHeight] = useState(56);
+  const [dropping, setDropping] = useState(false);
+  const [panning, setPanning] = useState(false);
   const panDrag = useRef<{
     active: boolean;
     startX: number;
@@ -271,11 +279,13 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     scrollLeft: number;
     scrollTop: number;
   } | null>(null);
-  const [panning, setPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [dropping, setDropping] = useState(false);
   const addFilesRef = useRef<(files: File[]) => void>(() => {});
-  // Holding a tile for half a second switches to edit mode and hands the pointer to the grid.
+  const onTimerFinish = useCallback(
+    (title: string) => setNotice(`Tempo scaduto: ${title}`),
+    [],
+  );
+  const viewport = useRef<HTMLElement>(null);
   const press = useRef<{
     timer: ReturnType<typeof setTimeout>;
     x: number;
@@ -326,6 +336,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     setSelected(null);
   }, []);
   const compactRef = useRef<() => void>(() => {});
+  const recentEditKeyRef = useRef<{ time: number; char: string } | null>(null);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -337,66 +348,25 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         captureInput?.focus();
         return;
       }
-      if (target.closest("input,textarea,select,[contenteditable],dialog:not([data-closing])"))
+      if (
+        target.closest(
+          "input,textarea,select,[contenteditable],dialog:not([data-closing]),.side-workspace",
+        )
+      )
         return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (k === "e") {
-        e.preventDefault();
-        toggleEdit();
-        return;
-      }
-      if (k === "n") {
-        e.preventDefault();
-        setDialog("text");
-        return;
-      }
-      if (k === "t") {
-        e.preventDefault();
-        setDialog("data");
-        return;
-      }
-      if (k === "a" || e.key === "+") {
-        e.preventDefault();
-        setDialog("add");
-        return;
-      }
-      if (k === "v") {
-        e.preventDefault();
-        setExpandedId(null);
-        setEditingNote(false);
-        setVaultOpen((old) => (old ? null : { folder: "", path: "" }));
-        return;
-      }
-      if (k === "c") {
-        e.preventDefault();
-        compactRef.current();
-        return;
-      }
-      if (k === "s") {
-        e.preventDefault();
-        openSettings("aspetto");
-        return;
-      }
-      if (k === "d") {
-        e.preventDefault();
-        changeDockSide(dockSide === "right" ? "left" : "right");
-        return;
-      }
-      if (e.key === "/") {
-        e.preventDefault();
-        const captureInput = document.querySelector<HTMLTextAreaElement>(
-          '.capture-bar textarea[aria-label="Appunta qualcosa"]',
-        );
-        captureInput?.focus();
-        return;
-      }
       if (e.key === "?") {
         e.preventDefault();
         setDialog((old) => (old === "shortcuts" ? null : "shortcuts"));
         return;
       }
+      if (e.key === "+") {
+        e.preventDefault();
+        setDialog("add");
+        return;
+      }
       if (e.key === "Escape") {
+        recentEditKeyRef.current = null;
         if (expandedId) {
           closeExpanded();
           return;
@@ -407,6 +377,37 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         }
         setSelected(null);
         setEditing(false);
+        return;
+      }
+      // Single-key "e" toggles grid edit mode; if followed immediately by another character,
+      // treat it as typing a word starting with "e" into the capture bar!
+      if (e.key === "e" || e.key === "E") {
+        const recent = recentEditKeyRef.current;
+        if (recent && performance.now() - recent.time < 650) {
+          e.preventDefault();
+          recentEditKeyRef.current = null;
+          setEditing(false);
+          appendToCaptureInput(recent.char + e.key);
+          return;
+        }
+        e.preventDefault();
+        recentEditKeyRef.current = { time: performance.now(), char: e.key };
+        toggleEdit();
+        return;
+      }
+      if (e.key.length === 1) {
+        const recent = recentEditKeyRef.current;
+        if (recent && performance.now() - recent.time < 650) {
+          e.preventDefault();
+          recentEditKeyRef.current = null;
+          setEditing(false);
+          appendToCaptureInput(recent.char + e.key);
+          return;
+        }
+        recentEditKeyRef.current = null;
+        e.preventDefault();
+        setEditing(false);
+        appendToCaptureInput(e.key);
       }
     };
     window.addEventListener("keydown", key);
@@ -512,9 +513,13 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   const openFolder = desktop.tiles.find((t) => t.id === openFolderId);
   const sideOpen = Boolean(expanded || vaultOpen);
   const openTileSide = (id: string, edit = false) => {
+    const targetTile = [...desktop.tiles, ...desktop.archive].find(
+      (t) => t.id === id,
+    );
     setVaultOpen(null);
     setExpandedId(id);
-    setEditingNote(edit);
+    // Note tiles ("text") are always edited inline directly on the tile without opening a separate form
+    setEditingNote(targetTile?.type === "text" ? false : edit);
   };
   const openVaultSide = (folder = "", path = "") => {
     setExpandedId(null);
@@ -642,6 +647,19 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               ...t,
               updatedAt: new Date().toISOString(),
               config: { ...t.config, ...patch },
+            }
+          : t,
+      ),
+    }));
+  const patchTitle = (id: string, title: string) =>
+    update((old) => ({
+      ...old,
+      tiles: old.tiles.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              title,
+              updatedAt: new Date().toISOString(),
             }
           : t,
       ),
@@ -916,7 +934,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         updatedAt: new Date().toISOString(),
       });
   };
-  // Hover parallax: the tile leans towards the pointer, with a soft highlight following it.
+  // Hover 3D parallax: strong perspective tilt, inner depth offset, directional shadow & specular glare.
   const tiltTile = (
     e: React.PointerEvent<HTMLDivElement>,
     t: Tile,
@@ -924,22 +942,32 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   ) => {
     const article = e.currentTarget.firstElementChild as HTMLElement | null;
     if (!article) return;
-    if (
-      reset ||
-      e.pointerType !== "mouse" ||
-      press.current ||
-      matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      for (const name of ["--rx", "--ry", "--mx", "--my", "--tilt"])
+    if (reset || e.pointerType === "touch" || press.current) {
+      for (const name of [
+        "--rx",
+        "--ry",
+        "--px",
+        "--py",
+        "--sx",
+        "--sy",
+        "--mx",
+        "--my",
+        "--tilt",
+      ])
         article.style.removeProperty(name);
       return;
     }
     const box = e.currentTarget.getBoundingClientRect();
-    const px = (e.clientX - box.left) / box.width - 0.5;
-    const py = (e.clientY - box.top) / box.height - 0.5;
-    const max = 9 / Math.sqrt(Math.max(t.w, t.h));
+    if (!box.width || !box.height) return;
+    const px = Math.max(-0.5, Math.min(0.5, (e.clientX - box.left) / box.width - 0.5));
+    const py = Math.max(-0.5, Math.min(0.5, (e.clientY - box.top) / box.height - 0.5));
+    const max = 16 / Math.pow(Math.max(t.w, t.h), 0.35);
     article.style.setProperty("--ry", `${(px * 2 * max).toFixed(2)}deg`);
     article.style.setProperty("--rx", `${(-py * 2 * max).toFixed(2)}deg`);
+    article.style.setProperty("--px", `${(px * 16).toFixed(1)}px`);
+    article.style.setProperty("--py", `${(py * 16).toFixed(1)}px`);
+    article.style.setProperty("--sx", `${(-px * 24).toFixed(1)}px`);
+    article.style.setProperty("--sy", `${(-py * 24 + 16).toFixed(1)}px`);
     article.style.setProperty("--mx", `${((px + 0.5) * 100).toFixed(1)}%`);
     article.style.setProperty("--my", `${((py + 0.5) * 100).toFixed(1)}%`);
     article.style.setProperty("--tilt", "1");
@@ -1014,7 +1042,9 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               t.type === "data" ||
               t.type === "folder" ||
               t.type === "file") &&
-            !(e.target as HTMLElement).closest("button,a,input,textarea")
+            !(e.target as HTMLElement).closest(
+              "button,a,input,textarea,.inline-note-surface,.text-headline",
+            )
           ) {
             if (t.type === "folder") {
               if (t.config.vaultPath) openVaultSide(t.config.vaultPath, "");
@@ -1031,7 +1061,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             !(e.target as HTMLElement).closest("button,a,input,textarea")
           ) {
             e.stopPropagation();
-            openTileSide(t.id, true);
+            openTileSide(t.id, t.type === "data");
           }
         }}
       >
@@ -1047,6 +1077,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             editing={editing}
             toggleItem={(id) => toggleItem(t.id, id)}
             updateConfig={(patch) => patchConfig(t.id, patch)}
+            updateTitle={(title) => patchTitle(t.id, title)}
             onTimerFinish={onTimerFinish}
           />
         </div>
@@ -1071,8 +1102,8 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             <button
               className="tile-quick-edit"
               aria-label={`Modifica contenuto ${t.title}`}
-              title="Modifica contenuto (o fai doppio clic sulla nota)"
-              onClick={() => openTileSide(t.id, true)}
+              title="Apri nella pagina laterale"
+              onClick={() => openTileSide(t.id, t.type === "data")}
             >
               <Pencil size={14} />
             </button>
@@ -1195,6 +1226,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           "--dock-height": `${dockHeight}px`,
           "--cell-height": `${rowHeight}px`,
           "--tile-padding": `${s.padding}px`,
+          ...(sideWidth ? { "--side-width": `${sideWidth}px` } : {}),
         } as CSSProperties
       }
     >
@@ -1227,7 +1259,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           <button
             className="icon-button"
             aria-label="Impostazioni"
-            title="Impostazioni (S)"
+            title="Impostazioni"
             onClick={() => openSettings("aspetto")}
           >
             <Settings2 size={16} />
@@ -1250,6 +1282,15 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         ref={viewport}
         className={`desktop-main ${space.fitted ? "desktop-viewport" : ""} ${panning ? "is-panning" : ""}`}
         onWheel={(e) => {
+          const scrollableTile = (e.target as HTMLElement).closest(
+            ".text-body, .checklist",
+          );
+          if (
+            scrollableTile &&
+            scrollableTile.scrollHeight > scrollableTile.clientHeight
+          ) {
+            return;
+          }
           const el = viewport.current;
           if (!el || !sideOpen) return;
           if (el.scrollWidth <= el.clientWidth) return;
@@ -1419,12 +1460,11 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                     };
                 }}
                 onDragStop={(layout, old, item) => {
-                  const target = folderHover.current;
+                  const readyFolder =
+                    folderHover.current?.ready && folderHover.current.id;
                   clearFolderHover();
-                  if (target?.ready) {
-                    moveIntoFolder(target.id, item.i);
-                    setSelected(null);
-                  } else saveLayout(layout, old, item);
+                  if (readyFolder) moveIntoFolder(readyFolder, item.i);
+                  else saveLayout(layout, old, item);
                 }}
                 onResizeStop={saveLayout}
               >
@@ -1444,15 +1484,14 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         archiveCount={desktop.archive.length}
         onVault={() => openVaultSide("", "")}
         vaultConfigured={Boolean(vaultStatus?.configured)}
-        vaultCount={vaultStatus?.noteCount ?? 0}
+        vaultCount={vaultStatus?.notesCount ?? 0}
         onShortcuts={() => setDialog("shortcuts")}
         onSaveCapture={saveCapture}
         onHeightChange={setDockHeight}
       />
-      {editing && tile && (
+      {tile && editing && (
         <Inspector
           tile={tile}
-          canDuplicate={!atCapacity && !!findTileSpace(desktop.tiles, tile, s)}
           onChange={setTile}
           onOpenFolder={
             tile.type === "folder"
@@ -1737,6 +1776,8 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           side={dockSide}
           onSideChange={changeDockSide}
           wide
+          width={sideWidth}
+          onWidthChange={setSideWidth}
           className="vault-workspace"
           onClose={() => setVaultOpen(null)}
         >
@@ -1761,14 +1802,64 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       )}
       {expanded && (
         <SideWorkspace
-          title={editingNote ? "Modifica" : "Vista completa"}
+          title={
+            editingNote && expanded.type === "data"
+              ? "Modifica"
+              : "Vista completa"
+          }
           side={dockSide}
           onSideChange={changeDockSide}
+          width={sideWidth}
+          onWidthChange={setSideWidth}
+          headerExtras={
+            !isArchived ? (
+              <div
+                className="tile-page-colors"
+                role="group"
+                aria-label="Colore sfondo tile"
+              >
+                {colorPresets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    className="tile-page-color-dot"
+                    aria-label={`Colore ${preset.name}`}
+                    aria-pressed={
+                      expanded.appearance.background.toLowerCase() ===
+                      preset.background.toLowerCase()
+                    }
+                    title={`Colore ${preset.name}`}
+                    style={{
+                      backgroundColor: preset.background,
+                      color: preset.color,
+                    }}
+                    onClick={() =>
+                      update((old) => ({
+                        ...old,
+                        tiles: old.tiles.map((t) =>
+                          t.id === expanded.id
+                            ? {
+                                ...t,
+                                updatedAt: new Date().toISOString(),
+                                appearance: {
+                                  ...t.appearance,
+                                  background: preset.background,
+                                  color: preset.color,
+                                },
+                              }
+                            : t,
+                        ),
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+            ) : undefined
+          }
           className={`tile-focus-modal content-${expanded.type}`}
           onClose={closeExpanded}
         >
-          {editingNote &&
-          (expanded.type === "text" || expanded.type === "data") ? (
+          {editingNote && expanded.type === "data" ? (
             <CaptureComposer
               initialKind={expanded.type}
               initial={{ title: expanded.title, body: captureSource(expanded) }}
@@ -1802,16 +1893,10 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             <article
               className={`tile expanded-tile tile-${expanded.type} font-${expanded.appearance.font}`}
               style={tileStyle(expanded, s)}
-              title={
-                !isArchived &&
-                (expanded.type === "text" || expanded.type === "data")
-                  ? "Doppio clic per modificare la nota"
-                  : undefined
-              }
               onDoubleClick={(e) => {
                 if (
                   !isArchived &&
-                  (expanded.type === "text" || expanded.type === "data") &&
+                  expanded.type === "data" &&
                   !(e.target as HTMLElement).closest("button,a,input,textarea")
                 ) {
                   setEditingNote(true);
@@ -1822,6 +1907,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                 tile={expanded}
                 editing={false}
                 expanded
+                updateConfig={
+                  !isArchived
+                    ? (patch) => patchConfig(expanded.id, patch)
+                    : undefined
+                }
+                updateTitle={
+                  !isArchived
+                    ? (title) => patchTitle(expanded.id, title)
+                    : undefined
+                }
                 onAddItem={
                   expanded.type === "data" && !isArchived
                     ? (text) =>
@@ -1863,7 +1958,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               )}
             </article>
           )}
-          {!editingNote && (
+          {!(editingNote && expanded.type === "data") && (
             <div className="dialog-actions expanded-actions">
               {isArchived ? (
                 <button
@@ -1911,16 +2006,15 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
                   </button>
                 </>
               )}
-              {!isArchived &&
-                (expanded.type === "text" || expanded.type === "data") && (
-                  <button
-                    className="primary"
-                    onClick={() => setEditingNote(true)}
-                  >
-                    <Pencil size={15} />
-                    Modifica
-                  </button>
-                )}
+              {!isArchived && expanded.type === "data" && (
+                <button
+                  className="primary"
+                  onClick={() => setEditingNote(true)}
+                >
+                  <Pencil size={15} />
+                  Modifica
+                </button>
+              )}
             </div>
           )}
         </SideWorkspace>

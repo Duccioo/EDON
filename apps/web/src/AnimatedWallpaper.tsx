@@ -75,7 +75,7 @@ export function perlin(x: number, y: number, z: number) {
 
 type Painter = (t: number) => void;
 /** Reduced-motion users still get the wallpaper they chose, just calmer. */
-const calm = 0.4;
+const calm = 0.65;
 
 /** Slow Perlin clouds, quantised to four tones with ordered dithering. */
 function noisePainter(
@@ -95,14 +95,14 @@ function noisePainter(
   const image = ctx.createImageData(w, h);
   const base = hex(background);
   const ink = isDark(base) ? [255, 255, 255] : [0, 0, 0];
-  const strength = 0.17;
+  const strength = 0.21;
   const tones = [0, 1, 2, 3].map((i) =>
     base.map((c, k) => Math.round(lerp(c, ink[k], (i / 3) * strength))),
   );
   return (time) => {
     // Noise morphs in depth and drifts sideways: clearly alive, never busy.
-    const z = time * 0.0004 * speed;
-    const drift = time * 0.0006 * speed;
+    const z = time * 0.00075 * speed;
+    const drift = time * 0.0011 * speed;
     const scale = 0.035 * (cell / 4);
     for (let y = 0; y < h; y++)
       for (let x = 0; x < w; x++) {
@@ -165,7 +165,7 @@ function asciiPainter(
       Math.floor((tau * r) / (size * phrase.length * 1.4)),
     );
     const letters = [...phrase.repeat(copies)];
-    ctx.fillStyle = `rgba(${ink},${0.5 - (0.3 * r) / reach})`;
+    ctx.fillStyle = `rgba(${ink},${0.58 - (0.28 * r) / reach})`;
     letters.forEach((ch, i) => {
       if (ch === " ") return;
       const a = (i / letters.length) * tau;
@@ -176,7 +176,7 @@ function asciiPainter(
       ctx.fillText(ch, 0, 0);
       ctx.restore();
     });
-    ctx.strokeStyle = `rgba(${ink},0.09)`;
+    ctx.strokeStyle = `rgba(${ink},0.12)`;
     for (const radius of [r - 24, r + 24]) {
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, tau);
@@ -184,7 +184,7 @@ function asciiPainter(
     }
   }
   ctx.font = '12px "SFMono-Regular", Consolas, monospace';
-  ctx.fillStyle = `rgba(${ink},0.14)`;
+  ctx.fillStyle = `rgba(${ink},0.18)`;
   for (let y = -reach; y < reach; y += 24)
     for (let x = -reach; x < reach; x += 24) {
       const r = Math.hypot(x, y);
@@ -204,7 +204,7 @@ function asciiPainter(
     output.setTransform(1, 0, 0, 1, 0, 0);
     output.clearRect(0, 0, width, height);
     output.translate(x, y);
-    output.rotate(time * 0.001 * speed * 0.012 * tau);
+    output.rotate(time * 0.001 * speed * 0.032 * tau);
     output.drawImage(disc, -reach, -reach, reach * 2, reach * 2);
   };
 }
@@ -230,20 +230,25 @@ export function AnimatedWallpaper({
     let frame = 0;
     let paint: Painter | undefined;
     let last = 0;
-    const interval = kind === "noise" ? 1000 / 15 : 1000 / 24;
+    let lastWidth = 0;
+    let lastHeight = 0;
+    const interval = kind === "noise" ? 1000 / 18 : 1000 / 30;
     const loop = (time: number) => {
       frame = requestAnimationFrame(loop);
       if (document.hidden || time - last < interval) return;
       last = time;
       paint?.(time);
     };
-    const setup = () => {
-      cancelAnimationFrame(frame);
+    const setup = (force = true) => {
       const rect = contained
         ? parent.getBoundingClientRect()
         : { width: innerWidth, height: innerHeight };
       const width = Math.max(1, Math.floor(rect.width));
       const height = Math.max(1, Math.floor(rect.height));
+      if (!force && width === lastWidth && height === lastHeight) return;
+      lastWidth = width;
+      lastHeight = height;
+      cancelAnimationFrame(frame);
       // The disc is centred on the "edon" wordmark wherever the header puts it.
       const center: Center = () => {
         const mark = contained ? null : document.querySelector(".wordmark");
@@ -261,16 +266,17 @@ export function AnimatedWallpaper({
         center,
       );
       paint(0);
-      if (!still && !motion.matches) frame = requestAnimationFrame(loop);
+      if (!still) frame = requestAnimationFrame(loop);
     };
-    setup();
-    const observer = new ResizeObserver(setup);
+    setup(true);
+    const observer = new ResizeObserver(() => setup(false));
     observer.observe(contained ? parent : document.documentElement);
-    motion.addEventListener("change", setup);
+    const onMotion = () => setup(true);
+    motion.addEventListener("change", onMotion);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      motion.removeEventListener("change", setup);
+      motion.removeEventListener("change", onMotion);
     };
   }, [kind, background, contained, still]);
   return (

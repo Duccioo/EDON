@@ -4968,3 +4968,321 @@ dialog.settings-page::backdrop {
   gap: 3px;
   font-size: 11px;
 }
+
+/* ---------- Batch 2: Inline Note Editor, Resizable Flush SideWorkspace, 3D Parallax, Hover Scroll & Animated Wallpaper ---------- */
+
+/* 1. Animated Wallpaper stacking guarantee */
+.desktop {
+  position: relative;
+  isolation: isolate;
+}
+.animated-wallpaper {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+.animated-wallpaper.contained {
+  position: absolute;
+}
+.desktop-header,
+.desktop-main {
+  position: relative;
+  z-index: 1;
+}
+
+/* 2. Strong 3D Parallax on tiles */
+.tile-shell {
+  perspective: 650px;
+}
+.desktop:not(.editing) .tile-shell:hover {
+  z-index: 8;
+}
+.desktop:not(.editing) .tile-shell .tile:not(.expanded-tile) {
+  transform: perspective(650px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
+    translateZ(calc(var(--tilt, 0) * 14px)) !important;
+  transform-style: preserve-3d;
+  will-change: transform, box-shadow;
+}
+.desktop:not(.editing) .tile-shell:hover .tile:not(.expanded-tile) {
+  scale: 1.028 !important;
+  transition:
+    transform 0.09s ease-out,
+    scale 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease-out,
+    background-color 0.2s ease !important;
+  box-shadow:
+    var(--sx, 0px) var(--sy, 18px) 38px -6px rgba(12, 18, 10, 0.34),
+    0 6px 16px rgba(12, 18, 10, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.38);
+}
+.desktop:not(.editing) .tile-shell .tile:not(.expanded-tile) > :is(.tile-preview, .tile-render) {
+  transform: translate3d(
+    calc(var(--px, 0px) * 0.45),
+    calc(var(--py, 0px) * 0.45),
+    18px
+  );
+  transition: transform 0.12s ease-out;
+}
+.tile-shell .tile::after {
+  background: radial-gradient(
+    circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.45),
+    rgba(255, 255, 255, 0.14) 36%,
+    transparent 68%
+  );
+}
+
+/* 3. Scrollable long text tiles directly on hover */
+.tile-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.tile-preview .text-body,
+.size-2-1 .tile-preview .text-body,
+.size-1-1 .tile-preview .text-body,
+.size-3-1 .tile-preview .text-body,
+.desktop-viewport .size-2-2 .text-body,
+.desktop-viewport .size-1-2 .text-body,
+.desktop-dense .size-2-1 .text-body,
+.desktop-dense .size-1-1 .text-body {
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  margin-top: 8px;
+  padding-top: 0;
+  padding-right: 4px;
+  max-width: 100%;
+}
+.tile-preview .markdown-content.text-body > :not(:first-child) {
+  display: block !important;
+}
+.expanded-tile .text-body {
+  overflow: visible !important;
+  flex: 0 0 auto !important;
+  max-height: none !important;
+}
+
+/* 4. Inline Note Editor (live Markdown on Enter + Plain Text mode toggle) */
+.tile-shell:hover .tile-preview .note-meta,
+.tile-shell:focus-within .tile-preview .note-meta {
+  display: flex !important;
+}
+.note-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.note-mode-toggle:hover {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.note-mode-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+.inline-title-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0 0 2px;
+  margin: 0;
+  outline: none;
+}
+.inline-note-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: text;
+}
+.inline-note-markdown {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.inline-note-line,
+.inline-note-plain {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  padding: 2px 0;
+  margin: 0;
+  resize: none;
+  outline: none;
+}
+.inline-note-line:focus,
+.inline-note-plain:focus {
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  padding-inline: 4px;
+}
+.inline-note-line::placeholder,
+.inline-note-plain::placeholder {
+  color: inherit;
+  opacity: 0.48;
+}
+.inline-note-plain {
+  min-height: 72px;
+  flex: 1 1 auto;
+}
+.expanded-tile .inline-note-plain {
+  min-height: 260px;
+}
+
+/* 5. Flush outer edge + Resizable inner edge + Quick color swatches in SideWorkspace */
+.side-workspace {
+  top: 0;
+  bottom: 0;
+  width: var(--side-width, min(560px, 46vw));
+  border-radius: 0;
+}
+.side-workspace.side-wide {
+  width: var(--side-width, min(720px, 52vw));
+}
+.side-workspace.side-right {
+  right: 0;
+  border-right: 0;
+  border-top: 0;
+  border-bottom: 0;
+  border-radius: 22px 0 0 22px;
+}
+.side-workspace.side-left {
+  left: 0;
+  border-left: 0;
+  border-top: 0;
+  border-bottom: 0;
+  border-radius: 0 22px 22px 0;
+}
+.side-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  z-index: 15;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+}
+.side-resize-handle.handle-left {
+  left: 0;
+}
+.side-resize-handle.handle-right {
+  right: 0;
+}
+.side-resize-handle::after {
+  content: "";
+  width: 4px;
+  height: 44px;
+  border-radius: 99px;
+  background: rgba(35, 45, 30, 0.18);
+  transition:
+    background-color 0.15s ease,
+    height 0.15s ease;
+}
+.side-resize-handle:hover::after,
+.side-resize-handle:active::after {
+  background: rgba(35, 45, 30, 0.48);
+  height: 64px;
+}
+.tile-page-colors {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 6px;
+}
+.tile-page-color-dot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tile-page-color-dot:hover {
+  transform: scale(1.18);
+}
+.tile-page-color-dot[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px #f5f6f1,
+    0 0 0 4px #252d20;
+}
+@media (min-width: 900px) and (min-height: 600px) {
+  .desktop.with-side-right {
+    padding-right: calc(var(--side-width, min(560px, 46vw)) + 16px);
+  }
+  .desktop.with-side-right.with-side-wide {
+    padding-right: calc(var(--side-width, min(720px, 52vw)) + 16px);
+  }
+  .desktop.with-side-left {
+    padding-left: calc(var(--side-width, min(560px, 46vw)) + 16px);
+  }
+  .desktop.with-side-left.with-side-wide {
+    padding-left: calc(var(--side-width, min(720px, 52vw)) + 16px);
+  }
+  .desktop.with-side-right .capture-tools,
+  .desktop.with-side-right .capture-tools:has(.capture-bar.has-content) {
+    left: 24px;
+    right: calc(var(--side-width, min(560px, 46vw)) + 16px);
+    width: min(620px, calc(100vw - var(--side-width, min(560px, 46vw)) - 48px));
+  }
+  .desktop.with-side-right.with-side-wide .capture-tools,
+  .desktop.with-side-right.with-side-wide .capture-tools:has(.capture-bar.has-content) {
+    left: 24px;
+    right: calc(var(--side-width, min(720px, 52vw)) + 16px);
+    width: min(620px, calc(100vw - var(--side-width, min(720px, 52vw)) - 48px));
+  }
+  .desktop.with-side-left .capture-tools,
+  .desktop.with-side-left .capture-tools:has(.capture-bar.has-content) {
+    left: calc(var(--side-width, min(560px, 46vw)) + 16px);
+    right: 24px;
+    width: min(620px, calc(100vw - var(--side-width, min(560px, 46vw)) - 48px));
+  }
+  .desktop.with-side-left.with-side-wide .capture-tools,
+  .desktop.with-side-left.with-side-wide .capture-tools:has(.capture-bar.has-content) {
+    left: calc(var(--side-width, min(720px, 52vw)) + 16px);
+    right: 24px;
+    width: min(620px, calc(100vw - var(--side-width, min(720px, 52vw)) - 48px));
+  }
+}
+
+/* 6. Smart Capture Choice Bar */
+.composer-kind-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5c6552;
+  margin-right: 2px;
+}
+.composer-toolbar .composer-mode.is-suggested {
+  border: 1px dashed #657c1a;
+  background: #edf2e1;
+}

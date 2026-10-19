@@ -1,4 +1,4 @@
-import { useEffect, useRef, useId, type ReactNode } from "react";
+import { useEffect, useRef, useId, useState, type ReactNode } from "react";
 import { PanelLeft, PanelRight, X } from "lucide-react";
 export function Modal({
   title,
@@ -107,6 +107,9 @@ export function SideWorkspace({
   onSideChange,
   onClose,
   wide = false,
+  width,
+  onWidthChange,
+  headerExtras,
   className = "",
   children,
 }: {
@@ -115,12 +118,16 @@ export function SideWorkspace({
   onSideChange: (side: "left" | "right") => void;
   onClose: () => void;
   wide?: boolean;
+  width?: number;
+  onWidthChange?: (width: number) => void;
+  headerExtras?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
+  const [resizing, setResizing] = useState(false);
   closeRef.current = onClose;
 
   useEffect(() => {
@@ -140,17 +147,73 @@ export function SideWorkspace({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const clampWidth = (next: number) => {
+    const maxW =
+      typeof window !== "undefined"
+        ? Math.max(420, Math.min(980, window.innerWidth - 220))
+        : 920;
+    return Math.round(Math.max(320, Math.min(maxW, next)));
+  };
+
   return (
     <aside
       ref={ref}
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
-      className={`side-workspace side-${side} ${wide ? "side-wide" : ""} ${className}`}
+      style={width ? { width: `${width}px` } : undefined}
+      className={`side-workspace side-${side} ${wide ? "side-wide" : ""} ${resizing ? "is-resizing" : ""} ${className}`}
     >
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-orientation="vertical"
+        aria-label="Ridimensiona pannello laterale"
+        title="Trascina per ridimensionare il pannello"
+        className={`side-resize-handle side-resize-${side} ${side === "right" ? "handle-left" : "handle-right"}`}
+        onKeyDown={(e) => {
+          if (!onWidthChange) return;
+          const current =
+            width ?? ref.current?.getBoundingClientRect().width ?? 560;
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            onWidthChange(
+              clampWidth(current + (side === "right" ? 24 : -24)),
+            );
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            onWidthChange(
+              clampWidth(current + (side === "right" ? -24 : 24)),
+            );
+          }
+        }}
+        onPointerDown={(e) => {
+          if (!onWidthChange) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setResizing(true);
+          const move = (ev: PointerEvent) => {
+            const raw =
+              side === "right"
+                ? window.innerWidth - ev.clientX
+                : ev.clientX;
+            onWidthChange(clampWidth(raw));
+          };
+          const up = () => {
+            setResizing(false);
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            window.removeEventListener("pointercancel", up);
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+          window.addEventListener("pointercancel", up);
+        }}
+      />
       <div className="panel-heading side-workspace-heading">
         <h2 id={titleId}>{title}</h2>
         <div className="side-workspace-controls">
+          {headerExtras}
           <button
             type="button"
             className="icon-button"

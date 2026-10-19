@@ -1,5 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Eye, ListTodo, Paperclip, Pencil } from "lucide-react";
+import {
+  ArrowUp,
+  Eye,
+  Link2,
+  ListTodo,
+  Paperclip,
+  Pencil,
+  StickyNote,
+} from "lucide-react";
 import {
   captureLink,
   parseCapture,
@@ -28,6 +36,7 @@ export function CaptureComposer({
   );
   const [title, setTitle] = useState(initial?.title ?? "");
   const [kind, setKind] = useState(initialKind);
+  const [forceNote, setForceNote] = useState(false);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -36,7 +45,10 @@ export function CaptureComposer({
   const mirror = useRef<HTMLDivElement>(null);
   const currentBody = useRef(body);
   currentBody.current = body;
-  const link = detectLinks && kind === "text" ? captureLink(body) : null;
+  const detectedLink = detectLinks ? captureLink(body) : null;
+  const link = detectedLink && kind === "text" && !forceNote ? detectedLink : null;
+  const looksLikeTodo =
+    /^\s*[-*+]\s+\[[ xX]\]/m.test(body) || /^\s*(?:todo|lista)\s*:/i.test(body);
   const lastNewline = !compact ? body.lastIndexOf("\n") : -1;
   const completedMarkdown =
     lastNewline >= 0 ? body.slice(0, lastNewline).trimEnd() : "";
@@ -49,7 +61,7 @@ export function CaptureComposer({
       setHeight(
         Math.max(
           compact ? 24 : 160,
-          Math.min(compact ? 224 : 340, mirror.current!.scrollHeight),
+          Math.min(compact ? 180 : 340, mirror.current!.scrollHeight),
         ),
       );
     const observer = new ResizeObserver(measure);
@@ -95,14 +107,30 @@ export function CaptureComposer({
       setBusy(false);
     }
   }
+  function convertBodyToTodo(source: string) {
+    if (/^\s*[-*+]\s+\[[ xX]\]/m.test(source)) return source;
+    const trimmed = source.replace(/^\s*(?:todo|lista)\s*:\s*/i, "").trim();
+    if (!trimmed) return "- [ ] ";
+    const lines = trimmed.split(/\r?\n/);
+    return lines
+      .map((line, i) => {
+        if (!line.trim()) return line;
+        if (i === 0 && /^#{1,6}\s+/.test(line)) return line;
+        return `- [ ] ${line.replace(/^\s*[-*+]\s+/, "")}`;
+      })
+      .join("\n");
+  }
   function save() {
     if (busy) return;
     try {
-      onSave(link ?? parseCapture(body, kind, title));
+      const effectiveSource =
+        kind === "data" ? convertBodyToTodo(body) : body;
+      onSave(link ?? parseCapture(effectiveSource, kind, title));
       if (compact) {
         setBody("");
         setTitle("");
         setKind("text");
+        setForceNote(false);
         setPreview(false);
         input.current?.focus();
       }
@@ -186,7 +214,12 @@ export function CaptureComposer({
               style={{ height }}
               value={body}
               onChange={(e) => {
-                setBody(e.target.value);
+                const next = e.target.value;
+                setBody(next);
+                if (!next.trim()) {
+                  setKind("text");
+                  setForceNote(false);
+                }
                 setError("");
               }}
               onPaste={(e) => {
@@ -227,20 +260,50 @@ export function CaptureComposer({
         </label>
       </div>
       {(body || !compact) && (
-        <div className="composer-toolbar">
+        <div
+          className="composer-toolbar"
+          role="group"
+          aria-label="Scegli cosa aggiungere"
+        >
+          {compact && (
+            <span className="composer-kind-label">
+              {link
+                ? "Rilevato link:"
+                : looksLikeTodo || kind === "data"
+                  ? "Aggiungi:"
+                  : "Cosa aggiungere:"}
+            </span>
+          )}
           <button
             type="button"
             className="composer-mode"
+            aria-label="Aggiungi come nota"
+            aria-pressed={kind === "text" && !link}
+            title="Salva come Nota sul desktop"
+            onClick={() => {
+              setKind("text");
+              setForceNote(true);
+              setError("");
+              setPreview(false);
+              input.current?.focus();
+            }}
+          >
+            <StickyNote size={16} />
+            <span>Nota</span>
+          </button>
+          <button
+            type="button"
+            className={`composer-mode ${looksLikeTodo && kind !== "data" ? "is-suggested" : ""}`}
             aria-label="Trasforma in TODO"
             aria-pressed={kind === "data"}
-            title="TODO dalle righe - [ ]"
+            title="Salva come lista Todo"
             onClick={() => {
-              setKind(kind === "text" ? "data" : "text");
+              setKind("data");
+              setForceNote(false);
               setError("");
-              if (kind === "text" && !/^\s*[-*+]\s+\[[ xX]\]/m.test(body))
-                setBody(
-                  (old) => `${old.trimEnd()}${old.trim() ? "\n\n" : ""}- [ ] `,
-                );
+              if (!/^\s*[-*+]\s+\[[ xX]\]/m.test(body)) {
+                setBody((old) => convertBodyToTodo(old));
+              }
               setPreview(false);
               input.current?.focus();
             }}
@@ -248,6 +311,24 @@ export function CaptureComposer({
             <ListTodo size={17} />
             <span>Todo</span>
           </button>
+          {detectedLink && (
+            <button
+              type="button"
+              className="composer-mode"
+              aria-label="Aggiungi come collegamento"
+              aria-pressed={Boolean(link)}
+              title="Salva come Collegamento rapido"
+              onClick={() => {
+                setKind("text");
+                setForceNote(false);
+                setError("");
+                input.current?.focus();
+              }}
+            >
+              <Link2 size={16} />
+              <span>Collegamento</span>
+            </button>
+          )}
           <button
             type="button"
             className="icon-button"
@@ -262,7 +343,9 @@ export function CaptureComposer({
               ? "Carico l’immagine…"
               : link
                 ? "Diventerà un collegamento · ⌘ / Ctrl + Invio"
-                : "Invio renderizza la riga · ⌘ / Ctrl + Invio salva"}
+                : looksLikeTodo && kind === "text"
+                  ? "Rilevata lista · clicca Todo o premi ⌘ / Ctrl + Invio"
+                  : "⌘ / Ctrl + Invio salva"}
           </span>
           <button
             className="composer-save"

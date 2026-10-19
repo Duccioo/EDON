@@ -3,6 +3,8 @@ import {
   ArrowUpRight,
   BookOpen,
   Check,
+  Code2,
+  FileText,
   Image as ImageIcon,
   ListTodo,
   Plus,
@@ -81,6 +83,261 @@ function Clock({ tile }: { tile: Tile }) {
     </>
   );
 }
+
+function InlineNoteEditor({
+  tile,
+  editing,
+  expanded,
+  updateConfig,
+  updateTitle,
+}: {
+  tile: Tile;
+  editing: boolean;
+  expanded: boolean;
+  updateConfig?: (patch: Partial<Tile["config"]>) => void;
+  updateTitle?: (title: string) => void;
+}) {
+  const [mode, setMode] = useState<"markdown" | "plain">("markdown");
+  const [committed, setCommitted] = useState(tile.config.body);
+  const [activeLine, setActiveLine] = useState("");
+  const [plainDraft, setPlainDraft] = useState(tile.config.body);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(tile.title);
+  const lineInputRef = useRef<HTMLTextAreaElement>(null);
+  const lastSavedRef = useRef(tile.config.body);
+
+  useEffect(() => {
+    if (tile.config.body !== lastSavedRef.current) {
+      lastSavedRef.current = tile.config.body;
+      setCommitted(tile.config.body);
+      setPlainDraft(tile.config.body);
+      setActiveLine("");
+    }
+  }, [tile.config.body]);
+
+  useEffect(() => {
+    setTitleDraft(tile.title);
+  }, [tile.title]);
+
+  const saveBody = (nextBody: string) => {
+    lastSavedRef.current = nextBody;
+    updateConfig?.({ body: nextBody });
+  };
+
+  const commitLines = (rawValue: string) => {
+    const lastNewline = rawValue.lastIndexOf("\n");
+    if (lastNewline === -1) {
+      setActiveLine(rawValue);
+      return;
+    }
+    const completed = rawValue.slice(0, lastNewline);
+    const remainder = rawValue.slice(lastNewline + 1);
+    const nextCommitted = committed ? `${committed}\n${completed}` : completed;
+    setCommitted(nextCommitted);
+    setActiveLine(remainder);
+    saveBody(remainder ? `${nextCommitted}\n${remainder}` : nextCommitted);
+  };
+
+  const canEdit = !editing && Boolean(updateConfig);
+
+  return (
+    <>
+      <div className="note-meta">
+        <StickyNote size={14} aria-hidden="true" />
+        <span>
+          {tile.subtitle ||
+            (tile.config.vaultPath
+              ? `Vault · ${tile.config.vaultPath}`
+              : "Nota personale")}
+        </span>
+        {canEdit && (
+          <button
+            type="button"
+            className="note-mode-toggle"
+            aria-pressed={mode === "plain"}
+            aria-label={
+              mode === "markdown"
+                ? "Modalità testo normale"
+                : "Modalità Markdown compilato"
+            }
+            title={
+              mode === "markdown"
+                ? "Passa a modalità testo normale"
+                : "Passa a modalità Markdown compilato on the fly"
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              if (mode === "markdown") {
+                const full = activeLine
+                  ? [committed, activeLine].filter(Boolean).join("\n")
+                  : committed;
+                setPlainDraft(full);
+                setMode("plain");
+              } else {
+                setCommitted(plainDraft);
+                setActiveLine("");
+                saveBody(plainDraft);
+                setMode("markdown");
+              }
+            }}
+          >
+            {mode === "markdown" ? (
+              <>
+                <FileText size={12} aria-hidden="true" />
+                <span>Testo normale</span>
+              </>
+            ) : (
+              <>
+                <Code2 size={12} aria-hidden="true" />
+                <span>Markdown live</span>
+              </>
+            )}
+          </button>
+        )}
+        {expanded && (
+          <span className="note-date">
+            {new Intl.DateTimeFormat("it-IT", {
+              day: "numeric",
+              month: "short",
+            }).format(new Date(tile.updatedAt))}
+          </span>
+        )}
+      </div>
+      {canEdit && editingTitle ? (
+        <input
+          autoFocus
+          aria-label="Titolo"
+          className="inline-title-input text-headline"
+          value={titleDraft}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            setTitleDraft(e.target.value);
+            if (e.target.value.trim()) updateTitle?.(e.target.value);
+          }}
+          onBlur={() => {
+            setEditingTitle(false);
+            if (titleDraft.trim() && titleDraft.trim() !== tile.title) {
+              updateTitle?.(titleDraft.trim());
+            } else {
+              setTitleDraft(tile.title);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              setEditingTitle(false);
+              if (titleDraft.trim()) updateTitle?.(titleDraft.trim());
+              lineInputRef.current?.focus();
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
+              setTitleDraft(tile.title);
+              setEditingTitle(false);
+            }
+          }}
+        />
+      ) : (
+        <h2
+          className="text-headline"
+          onClick={(e) => {
+            if (!canEdit || !updateTitle) return;
+            e.stopPropagation();
+            setEditingTitle(true);
+          }}
+          title={canEdit && updateTitle ? "Clicca per modificare il titolo" : undefined}
+        >
+          {tile.title}
+        </h2>
+      )}
+      {mode === "plain" && canEdit ? (
+        <div
+          className="text-body inline-note-surface is-plain"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <textarea
+            aria-label={expanded ? "Contenuto Markdown" : "Testo normale della nota"}
+            className="inline-note-plain"
+            value={plainDraft}
+            placeholder="Scrivi qui in modalità testo normale…"
+            onChange={(e) => {
+              const next = e.target.value;
+              setPlainDraft(next);
+              setCommitted(next);
+              saveBody(next);
+            }}
+          />
+        </div>
+      ) : (
+        <div
+          className="text-body inline-note-surface"
+          onClick={(e) => {
+            if (!canEdit) return;
+            if ((e.target as HTMLElement).closest("a,button,input,textarea")) return;
+            e.stopPropagation();
+            lineInputRef.current?.focus();
+          }}
+        >
+          {committed ? (
+            <MarkdownContent className="inline-note-markdown" text={committed} />
+          ) : null}
+          {canEdit && (
+            <textarea
+              ref={lineInputRef}
+              rows={1}
+              aria-label={expanded ? "Contenuto Markdown" : "Scrivi nella nota"}
+              className="inline-note-line"
+              value={activeLine}
+              placeholder={
+                committed
+                  ? "Scrivi e premi Invio per renderizzare…"
+                  : "Scrivi qui… (si renderizza quando vai a capo)"
+              }
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val.includes("\n")) {
+                  commitLines(val);
+                } else {
+                  setActiveLine(val);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  commitLines(`${activeLine}\n`);
+                } else if (
+                  e.key === "Backspace" &&
+                  activeLine.length === 0 &&
+                  committed.length > 0
+                ) {
+                  e.preventDefault();
+                  const lines = committed.split("\n");
+                  const last = lines.pop() ?? "";
+                  const rest = lines.join("\n");
+                  setCommitted(rest);
+                  setActiveLine(last);
+                  saveBody(committed);
+                } else if (e.key === "Escape") {
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={() => {
+                if (activeLine.trim()) {
+                  const nextCommitted = committed
+                    ? `${committed}\n${activeLine}`
+                    : activeLine;
+                  setCommitted(nextCommitted);
+                  setActiveLine("");
+                  saveBody(nextCommitted);
+                }
+              }}
+            />
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function TileView({
   tile,
   editing,
@@ -88,6 +345,7 @@ export function TileView({
   expanded = false,
   onAddItem,
   updateConfig,
+  updateTitle,
   onTimerFinish,
 }: {
   tile: Tile;
@@ -96,6 +354,7 @@ export function TileView({
   expanded?: boolean;
   onAddItem?: (text: string) => void;
   updateConfig?: (patch: Partial<Tile["config"]>) => void;
+  updateTitle?: (title: string) => void;
   onTimerFinish?: (title: string) => void;
 }) {
   if (tile.type === "clock") return <Clock tile={tile} />;
@@ -164,27 +423,13 @@ export function TileView({
     );
   if (tile.type === "text")
     return (
-      <>
-        <div className="note-meta">
-          <StickyNote size={14} aria-hidden="true" />
-          <span>
-            {tile.subtitle ||
-              (tile.config.vaultPath
-                ? `Vault · ${tile.config.vaultPath}`
-                : "Nota personale")}
-          </span>
-          {expanded && (
-            <span className="note-date">
-              {new Intl.DateTimeFormat("it-IT", {
-                day: "numeric",
-                month: "short",
-              }).format(new Date(tile.updatedAt))}
-            </span>
-          )}
-        </div>
-        <h2 className="text-headline">{tile.title}</h2>
-        <MarkdownContent className="text-body" text={tile.config.body} />
-      </>
+      <InlineNoteEditor
+        tile={tile}
+        editing={editing}
+        expanded={expanded}
+        updateConfig={updateConfig}
+        updateTitle={updateTitle}
+      />
     );
   return (
     <>
