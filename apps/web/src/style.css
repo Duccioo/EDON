@@ -3740,7 +3740,7 @@ dialog.settings-page::backdrop {
   border-radius: inherit;
   background: radial-gradient(
     circle at var(--mx, 50%) var(--my, 50%),
-    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.1),
     transparent 60%
   );
   transition: opacity 0.3s;
@@ -4222,7 +4222,6 @@ dialog.settings-page::backdrop {
   }
 }
 
-
 /* ---------- Fix capture-tools & central + button overlap when side workspace/editor is open ---------- */
 .capture-tools {
   display: flex;
@@ -4261,7 +4260,8 @@ dialog.settings-page::backdrop {
     width: min(620px, calc(100vw - min(560px, 46vw) - 64px));
   }
   .desktop.with-side-right.with-side-wide .capture-tools,
-  .desktop.with-side-right.with-side-wide .capture-tools:has(.capture-bar.has-content) {
+  .desktop.with-side-right.with-side-wide
+    .capture-tools:has(.capture-bar.has-content) {
     left: 24px;
     right: calc(min(720px, 52vw) + 28px);
     transform: none;
@@ -4277,7 +4277,8 @@ dialog.settings-page::backdrop {
     width: min(620px, calc(100vw - min(560px, 46vw) - 64px));
   }
   .desktop.with-side-left.with-side-wide .capture-tools,
-  .desktop.with-side-left.with-side-wide .capture-tools:has(.capture-bar.has-content) {
+  .desktop.with-side-left.with-side-wide
+    .capture-tools:has(.capture-bar.has-content) {
     left: calc(min(720px, 52vw) + 28px);
     right: 24px;
     transform: none;
@@ -4364,7 +4365,8 @@ dialog.settings-page::backdrop {
   }
 }
 @keyframes radio-eq-bounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: scaleY(0.28);
   }
   50% {
@@ -4372,7 +4374,8 @@ dialog.settings-page::backdrop {
   }
 }
 @keyframes radio-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -4993,21 +4996,21 @@ dialog.settings-page::backdrop {
   z-index: 1;
 }
 
-/* 2. Strong 3D Parallax on tiles */
+/* 2. Subtle 3D Parallax on tiles */
 .tile-shell {
-  perspective: 650px;
+  perspective: 1100px;
 }
 .desktop:not(.editing) .tile-shell:hover {
   z-index: 8;
 }
 .desktop:not(.editing) .tile-shell .tile:not(.expanded-tile) {
-  transform: perspective(650px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
-    translateZ(calc(var(--tilt, 0) * 14px)) !important;
+  transform: perspective(1100px) rotateX(var(--rx, 0deg))
+    rotateY(var(--ry, 0deg)) translateZ(calc(var(--tilt, 0) * 4px)) !important;
   transform-style: preserve-3d;
   will-change: transform, box-shadow;
 }
 .desktop:not(.editing) .tile-shell:hover .tile:not(.expanded-tile) {
-  scale: 1.028 !important;
+  scale: 1.012 !important;
   transition:
     transform 0.09s ease-out,
     scale 0.22s cubic-bezier(0.22, 1, 0.36, 1),
@@ -5018,7 +5021,10 @@ dialog.settings-page::backdrop {
     0 6px 16px rgba(12, 18, 10, 0.14),
     inset 0 0 0 1px rgba(255, 255, 255, 0.38);
 }
-.desktop:not(.editing) .tile-shell .tile:not(.expanded-tile) > :is(.tile-preview, .tile-render) {
+.desktop:not(.editing)
+  .tile-shell
+  .tile:not(.expanded-tile)
+  > :is(.tile-preview, .tile-render) {
   transform: translate3d(
     calc(var(--px, 0px) * 0.45),
     calc(var(--py, 0px) * 0.45),
@@ -5075,10 +5081,6 @@ dialog.settings-page::backdrop {
 }
 
 /* 4. Inline Note Editor (live Markdown on Enter + Plain Text mode toggle) */
-.tile-shell:hover .tile-preview .note-meta,
-.tile-shell:focus-within .tile-preview .note-meta {
-  display: flex !important;
-}
 .note-mode-toggle {
   display: inline-flex;
   align-items: center;
@@ -5226,7 +5228,9 @@ dialog.settings-page::backdrop {
   border: 1px solid rgba(0, 0, 0, 0.16);
   cursor: pointer;
   flex-shrink: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .tile-page-color-dot:hover {
   transform: scale(1.18);
@@ -5256,7 +5260,8 @@ dialog.settings-page::backdrop {
     width: min(620px, calc(100vw - var(--side-width, min(560px, 46vw)) - 48px));
   }
   .desktop.with-side-right.with-side-wide .capture-tools,
-  .desktop.with-side-right.with-side-wide .capture-tools:has(.capture-bar.has-content) {
+  .desktop.with-side-right.with-side-wide
+    .capture-tools:has(.capture-bar.has-content) {
     left: 24px;
     right: calc(var(--side-width, min(720px, 52vw)) + 16px);
     width: min(620px, calc(100vw - var(--side-width, min(720px, 52vw)) - 48px));
@@ -5268,7 +5273,8 @@ dialog.settings-page::backdrop {
     width: min(620px, calc(100vw - var(--side-width, min(560px, 46vw)) - 48px));
   }
   .desktop.with-side-left.with-side-wide .capture-tools,
-  .desktop.with-side-left.with-side-wide .capture-tools:has(.capture-bar.has-content) {
+  .desktop.with-side-left.with-side-wide
+    .capture-tools:has(.capture-bar.has-content) {
     left: calc(var(--side-width, min(720px, 52vw)) + 16px);
     right: 24px;
     width: min(620px, calc(100vw - var(--side-width, min(720px, 52vw)) - 48px));
@@ -5285,4 +5291,267 @@ dialog.settings-page::backdrop {
 .composer-toolbar .composer-mode.is-suggested {
   border: 1px dashed #657c1a;
   background: #edf2e1;
+}
+
+/* Preview layout follows the actual available box, including the side panel. */
+.tile-shell > .tile {
+  container: tile / size;
+}
+.desktop-main .tile-shell .tile-preview .text-headline,
+.desktop-main .tile-shell .tile-preview .tile-top h2 {
+  font-size: clamp(16px, min(10cqw, 17cqh), 32px);
+  line-height: 1.15;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.desktop-main .tile-shell .clock-time {
+  font-size: clamp(18px, min(28cqw, calc(100cqh - 44px)), 90px);
+  letter-spacing: -0.03em;
+}
+.tile-shell .tile-preview .note-meta {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+.tile-shell .tile-content-actions {
+  flex-shrink: 0;
+}
+.tile-shell .tile-render > * {
+  min-width: 0;
+}
+@container tile (height < 160px) {
+  .tile-preview :is(.note-meta, .todo-meta, .data-subtitle, .data-body) {
+    display: none;
+  }
+  .desktop-main .tile-shell .tile-preview :is(.text-headline, .tile-top h2) {
+    -webkit-line-clamp: 1;
+    font-size: clamp(16px, 8cqw, 22px);
+  }
+  .tile-content-actions .tile-quick-edit {
+    display: none;
+  }
+  .tile-preview .text-body {
+    margin-top: 6px;
+  }
+  .perf-grid,
+  .ai-limits-list {
+    gap: 4px;
+  }
+  .perf-detail,
+  .ai-limit-note,
+  .radio-station-sub {
+    display: none;
+  }
+}
+@container tile (height < 85px) {
+  .tile-preview .text-body {
+    display: none !important;
+  }
+  .tile-content-actions {
+    margin-top: auto;
+  }
+  .clock-bottom,
+  .weather-bottom {
+    display: none;
+  }
+  .desktop-main .tile-shell .clock-time {
+    font-size: clamp(18px, min(28cqw, 60cqh), 90px);
+  }
+}
+@container tile (width < 170px) {
+  .perf-detail,
+  .ai-limit-note,
+  .radio-station-sub {
+    display: none;
+  }
+  .radio-main {
+    gap: 6px;
+  }
+  .radio-play-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
+.note-document {
+  min-width: 0;
+  margin-top: 20px;
+}
+.note-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 11px;
+}
+.note-editor-toolbar > span {
+  opacity: 0.6;
+}
+.note-document .inline-note-surface {
+  gap: 0;
+}
+.note-document .inline-note-markdown:empty {
+  display: none;
+}
+.note-document .inline-note-markdown {
+  margin: 0;
+}
+.note-document .inline-note-markdown [data-source-start] {
+  cursor: text;
+  border-radius: 4px;
+  margin-block: 0 12px;
+}
+.note-document [data-source-start]:hover {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+.note-document [data-source-start]:focus-visible,
+.note-document textarea:focus-visible,
+.inline-title-input:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.note-document .inline-note-line,
+.note-document .inline-note-plain {
+  display: block;
+  box-sizing: border-box;
+  line-height: 1.7;
+  padding: 0;
+  margin: 0 0 12px;
+  overflow: hidden;
+}
+.note-document .inline-note-line:focus {
+  padding: 0;
+}
+
+/* Dense widgets keep their controls visible and scroll only their detail area. */
+.tile-shell :is(.perf-tile, .ai-limits-tile, .radio-tile) {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.tile-shell :is(.perf-grid, .ai-limits-list) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.tile-shell .ai-limits-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr));
+  align-content: start;
+}
+.tile-shell :is(.perf-row, .ai-limit-row, .perf-heading) {
+  min-width: 0;
+}
+.tile-shell .perf-heading {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tile-shell :is(.ai-limit-step, .perf-val) {
+  flex-shrink: 0;
+}
+.tile-shell :is(.perf-tile, .ai-limits-tile, .radio-tile) > .tile-top {
+  flex-shrink: 0;
+  gap: 4px;
+}
+@container tile (height < 160px) {
+  .perf-foot,
+  .radio-foot,
+  .perf-live,
+  .radio-badge,
+  .ai-avg-badge {
+    display: none;
+  }
+  .perf-tile,
+  .ai-limits-tile,
+  .radio-tile {
+    gap: 5px;
+  }
+}
+@container tile (width < 170px) {
+  .perf-live,
+  .radio-badge,
+  .ai-avg-badge,
+  .radio-eq {
+    display: none;
+  }
+  .radio-foot {
+    flex-wrap: wrap;
+  }
+  .radio-volume {
+    width: 100%;
+  }
+}
+
+.tile-shell {
+  container: tile-shell / size;
+}
+@container tile-shell (width < 160px) {
+  .tile {
+    padding-inline: min(
+      10px,
+      calc(var(--tile-padding) * var(--tile-density))
+    ) !important;
+  }
+}
+.desktop-main .tile-shell .tile-preview .tile-top h2 {
+  padding-right: 0;
+}
+.tile-shell .folder-title {
+  font-size: clamp(16px, 12cqw, 30px);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+.tile-shell .folder-preview {
+  min-height: 0;
+  overflow: hidden;
+}
+.tile-shell .folder-mini {
+  min-height: 0;
+  max-height: 55px;
+}
+@container tile (height < 160px) {
+  .folder-preview,
+  .folder-bottom {
+    display: none;
+  }
+  .tile-render + .tile-expand {
+    margin-top: auto;
+  }
+}
+@container tile (width < 100px) {
+  .tile-preview .text-body {
+    display: none !important;
+  }
+  .desktop-main .tile-shell .tile-preview :is(.text-headline, .tile-top h2) {
+    -webkit-line-clamp: 2;
+  }
+  .tile-content-actions .tile-expand {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .tile-content-actions .tile-expand svg {
+    display: none;
+  }
+}
+.note-document textarea:focus-visible {
+  outline: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: 4px;
+}
+.note-document .inline-note-line:focus {
+  background: transparent;
+}
+.expanded-tile .inline-title-input {
+  border-bottom: 0;
 }

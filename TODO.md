@@ -1,16 +1,29 @@
 # TODO
 
+## Verifica delle rifiniture — 23 ottobre 2026
 
-- [ ] Ancora vedo poche animazioni, tipo quando apro un tile o quando lo chiudo, oppure quando apro le impostazioni, oppure quando apro il menù di aggiunta tile.
-- [ ] Il modo con cui faccio l'editing di una nota è sbagliato. Non voglio che si apra un editor, voglio che sia sempre una sorta di editor inline, cioè che posso modificare la nota direttamente sul tile senza un editor a parte, il rendering in markdown avviene in tempo reale mentre scrivo (si renderizza solo dopo che vado a capo, non ad ogni lettera digitata).
-  - [ ] Magari aggiungere un pulsante per farlo tornare o in modalità testo normale o in modalità markdown compilato on the fly per chi non lo vuole.
-  - [ ] Aggiungere la possibilità di cambiare il colore dello sfondo direttamente nella pagina del tile, senza dover aprire le impostazioni (basta metterci qualche colore in alto)
-  - [ ] il lato esterno della pagina lo voglio che sia a filo della finestra mentre il lato interno voglio che sia resizable.
-- [ ] Per aggiungere note o altro è sufficinete iniziare a scrivere con la tastiera, e poi il desktop capisce che voglio aggiungere una nota o un todo o altro, e mi fa scegliere cosa voglio aggiungere.
-  - [ ] Aggiunstare il bug che quando scrivo parecchio il desktop si rimpicciolisce in alto. Magari quando 
-- [ ] Gli sfondi animati non funzionano più
-- [ ] L'effetto 3d Parallasse sui tile non è evidente...
-- [ ] Passando su un tile di testo molto lungo se scorro col mouse il contenuto del tile scorre, invece di dover aprire il tile per vedere tutto il contenuto.
+- [x] Note sul desktop in sola lettura, incluso il titolo; un clic apre il documento laterale. Aggiunta rapida soltanto nelle TODO.
+- [x] Modifica dei blocchi già scritti, rendering con Invio, modalità sorgente, salvataggio durante la digitazione e annulla/ripristina nell’editor delle note.
+- [x] Anteprime dimensionate sullo spazio effettivo, senza salti al passaggio del mouse; contenuti dei widget stretti scorrevoli e titoli delle cartelle contenuti.
+- [ ] Validare la fluidità di sfondi e animazioni con misurazioni su hardware meno potente: la precedente spunta non costituisce una verifica prestazionale.
+- [ ] Rifinire ulteriormente l’esperienza di scrittura: selezione tra blocchi e continuazione automatica delle liste. L’editor conserva Markdown e offre la modalità sorgente, ma non replica tutte le interazioni di Obsidian/Notion.
+
+Dettagli e verifiche: [rifiniture del 23 ottobre](docs/refinements-2026-10-23.md).
+
+## Attività precedentemente segnate come completate
+
+
+- [x] Ancora vedo poche animazioni, tipo quando apro un tile o quando lo chiudo, oppure quando apro le impostazioni, oppure quando apro il menù di aggiunta tile.
+  - [x] Cerca una libreria per animazioni e micro-interazioni sul web e reddit
+- [x] Il modo con cui faccio l'editing di una nota è sbagliato. Non voglio che si apra un editor, voglio che sia sempre una sorta di editor tipo come avviene con Notion che posso tranquillamente scrivere nella nota senza cliccarci, il rendering in markdown avviene in tempo reale mentre scrivo (si renderizza solo dopo che vado a capo, non ad ogni lettera digitata)
+  - [x] Non posso scrivere direttamente sul tile nel desktop, devo aprire il tile per scrivere.
+  - [x] Magari aggiungere un pulsante per farlo tornare o in modalità testo normale o in modalità markdown compilato on the fly per chi non lo vuole.
+  - [x] Aggiungere la possibilità di cambiare il colore dello sfondo direttamente nella pagina del tile, senza dover aprire le impostazioni (basta metterci qualche colore in alto)
+- [x] Il modo con cui vedo i tile di testo non mi piace:
+  - [x] se sono tipo 1x1 o 2x1 sono talmente piccoli che vedo solo il titolo gigantesco, c'è tanto spazio inutilizzato tipo in alto e in basso
+  - [x] magari servirebbe un modo per riorganizzare le informazioni a seconda di quanto è grande il tile, se è troppo piccolo va bene vedere solo il titolo eh
+- [x] Gli sfondi animati sono troppo pesanti fanno laggare tutto!
+- [x] L'effetto 3d Parallasse sui tile è troppo evidente, ridurlo!
 
 
 
@@ -27,6 +40,10 @@
 - [ ] Aggiungere la possibilità di fare più viste (Tipo vista lavoro, vista personale, ecc.) e poterle cambiare velocemente.
 
 ---
+- [x] Per aggiungere note o altro è sufficinete iniziare a scrivere con la tastiera, e poi il desktop capisce che voglio aggiungere una nota o un todo o altro, e mi fa scegliere cosa voglio aggiungere.
+  - [x] Aggiunstare il bug che quando scrivo parecchio il desktop si rimpicciolisce in alto
+- [x] il lato esterno della pagina lo voglio che sia a filo della finestra mentre il lato interno voglio che sia resizable.
+- [x] Passando su un tile di testo molto lungo se scorro col mouse il contenuto del tile scorre, invece di dover aprire il tile per vedere tutto il contenuto.
 - [x] Tile prestazioni
 - [x] Tile Subscription AI limits
 - [x] Mancano le animaizoni

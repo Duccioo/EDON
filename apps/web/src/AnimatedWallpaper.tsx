@@ -86,7 +86,7 @@ function noisePainter(
   speed: number,
   _center?: Center,
 ): Painter {
-  const cell = 4;
+  const cell = 6;
   const w = Math.ceil(width / cell);
   const h = Math.ceil(height / cell);
   canvas.width = w;
@@ -232,7 +232,7 @@ export function AnimatedWallpaper({
     let last = 0;
     let lastWidth = 0;
     let lastHeight = 0;
-    const interval = kind === "noise" ? 1000 / 18 : 1000 / 30;
+    const interval = kind === "noise" ? 1000 / 12 : 1000 / 24;
     const loop = (time: number) => {
       frame = requestAnimationFrame(loop);
       if (document.hidden || time - last < interval) return;

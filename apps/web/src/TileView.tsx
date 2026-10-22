@@ -3,13 +3,12 @@ import {
   ArrowUpRight,
   BookOpen,
   Check,
-  Code2,
-  FileText,
   Image as ImageIcon,
   ListTodo,
   Plus,
   StickyNote,
 } from "lucide-react";
+import { NoteEditor } from "./NoteEditor";
 import { MarkdownContent } from "./MarkdownContent";
 import {
   AiLimitsTile,
@@ -97,49 +96,7 @@ function InlineNoteEditor({
   updateConfig?: (patch: Partial<Tile["config"]>) => void;
   updateTitle?: (title: string) => void;
 }) {
-  const [mode, setMode] = useState<"markdown" | "plain">("markdown");
-  const [committed, setCommitted] = useState(tile.config.body);
-  const [activeLine, setActiveLine] = useState("");
-  const [plainDraft, setPlainDraft] = useState(tile.config.body);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(tile.title);
-  const lineInputRef = useRef<HTMLTextAreaElement>(null);
-  const lastSavedRef = useRef(tile.config.body);
-
-  useEffect(() => {
-    if (tile.config.body !== lastSavedRef.current) {
-      lastSavedRef.current = tile.config.body;
-      setCommitted(tile.config.body);
-      setPlainDraft(tile.config.body);
-      setActiveLine("");
-    }
-  }, [tile.config.body]);
-
-  useEffect(() => {
-    setTitleDraft(tile.title);
-  }, [tile.title]);
-
-  const saveBody = (nextBody: string) => {
-    lastSavedRef.current = nextBody;
-    updateConfig?.({ body: nextBody });
-  };
-
-  const commitLines = (rawValue: string) => {
-    const lastNewline = rawValue.lastIndexOf("\n");
-    if (lastNewline === -1) {
-      setActiveLine(rawValue);
-      return;
-    }
-    const completed = rawValue.slice(0, lastNewline);
-    const remainder = rawValue.slice(lastNewline + 1);
-    const nextCommitted = committed ? `${committed}\n${completed}` : completed;
-    setCommitted(nextCommitted);
-    setActiveLine(remainder);
-    saveBody(remainder ? `${nextCommitted}\n${remainder}` : nextCommitted);
-  };
-
-  const canEdit = !editing && Boolean(updateConfig);
-
+  const canEdit = expanded && !editing && Boolean(updateConfig);
   return (
     <>
       <div className="note-meta">
@@ -150,189 +107,26 @@ function InlineNoteEditor({
               ? `Vault · ${tile.config.vaultPath}`
               : "Nota personale")}
         </span>
-        {canEdit && (
-          <button
-            type="button"
-            className="note-mode-toggle"
-            aria-pressed={mode === "plain"}
-            aria-label={
-              mode === "markdown"
-                ? "Modalità testo normale"
-                : "Modalità Markdown compilato"
-            }
-            title={
-              mode === "markdown"
-                ? "Passa a modalità testo normale"
-                : "Passa a modalità Markdown compilato on the fly"
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              if (mode === "markdown") {
-                const full = activeLine
-                  ? [committed, activeLine].filter(Boolean).join("\n")
-                  : committed;
-                setPlainDraft(full);
-                setMode("plain");
-              } else {
-                setCommitted(plainDraft);
-                setActiveLine("");
-                saveBody(plainDraft);
-                setMode("markdown");
-              }
-            }}
-          >
-            {mode === "markdown" ? (
-              <>
-                <FileText size={12} aria-hidden="true" />
-                <span>Testo normale</span>
-              </>
-            ) : (
-              <>
-                <Code2 size={12} aria-hidden="true" />
-                <span>Markdown live</span>
-              </>
-            )}
-          </button>
-        )}
-        {expanded && (
-          <span className="note-date">
-            {new Intl.DateTimeFormat("it-IT", {
-              day: "numeric",
-              month: "short",
-            }).format(new Date(tile.updatedAt))}
-          </span>
-        )}
       </div>
-      {canEdit && editingTitle ? (
+      {canEdit && updateTitle ? (
         <input
-          autoFocus
-          aria-label="Titolo"
           className="inline-title-input text-headline"
-          value={titleDraft}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            setTitleDraft(e.target.value);
-            if (e.target.value.trim()) updateTitle?.(e.target.value);
-          }}
-          onBlur={() => {
-            setEditingTitle(false);
-            if (titleDraft.trim() && titleDraft.trim() !== tile.title) {
-              updateTitle?.(titleDraft.trim());
-            } else {
-              setTitleDraft(tile.title);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              setEditingTitle(false);
-              if (titleDraft.trim()) updateTitle?.(titleDraft.trim());
-              lineInputRef.current?.focus();
-            } else if (e.key === "Escape") {
-              e.stopPropagation();
-              setTitleDraft(tile.title);
-              setEditingTitle(false);
-            }
-          }}
+          aria-label="Titolo"
+          maxLength={120}
+          value={tile.title}
+          onChange={(e) => updateTitle(e.target.value)}
         />
       ) : (
-        <h2
-          className="text-headline"
-          onClick={(e) => {
-            if (!canEdit || !updateTitle) return;
-            e.stopPropagation();
-            setEditingTitle(true);
-          }}
-          title={canEdit && updateTitle ? "Clicca per modificare il titolo" : undefined}
-        >
-          {tile.title}
-        </h2>
+        <h2 className="text-headline">{tile.title}</h2>
       )}
-      {mode === "plain" && canEdit ? (
-        <div
-          className="text-body inline-note-surface is-plain"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <textarea
-            aria-label={expanded ? "Contenuto Markdown" : "Testo normale della nota"}
-            className="inline-note-plain"
-            value={plainDraft}
-            placeholder="Scrivi qui in modalità testo normale…"
-            onChange={(e) => {
-              const next = e.target.value;
-              setPlainDraft(next);
-              setCommitted(next);
-              saveBody(next);
-            }}
-          />
-        </div>
+      {canEdit ? (
+        <NoteEditor
+          key={tile.id}
+          body={tile.config.body}
+          onChange={(body) => updateConfig?.({ body })}
+        />
       ) : (
-        <div
-          className="text-body inline-note-surface"
-          onClick={(e) => {
-            if (!canEdit) return;
-            if ((e.target as HTMLElement).closest("a,button,input,textarea")) return;
-            e.stopPropagation();
-            lineInputRef.current?.focus();
-          }}
-        >
-          {committed ? (
-            <MarkdownContent className="inline-note-markdown" text={committed} />
-          ) : null}
-          {canEdit && (
-            <textarea
-              ref={lineInputRef}
-              rows={1}
-              aria-label={expanded ? "Contenuto Markdown" : "Scrivi nella nota"}
-              className="inline-note-line"
-              value={activeLine}
-              placeholder={
-                committed
-                  ? "Scrivi e premi Invio per renderizzare…"
-                  : "Scrivi qui… (si renderizza quando vai a capo)"
-              }
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val.includes("\n")) {
-                  commitLines(val);
-                } else {
-                  setActiveLine(val);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  commitLines(`${activeLine}\n`);
-                } else if (
-                  e.key === "Backspace" &&
-                  activeLine.length === 0 &&
-                  committed.length > 0
-                ) {
-                  e.preventDefault();
-                  const lines = committed.split("\n");
-                  const last = lines.pop() ?? "";
-                  const rest = lines.join("\n");
-                  setCommitted(rest);
-                  setActiveLine(last);
-                  saveBody(committed);
-                } else if (e.key === "Escape") {
-                  e.currentTarget.blur();
-                }
-              }}
-              onBlur={() => {
-                if (activeLine.trim()) {
-                  const nextCommitted = committed
-                    ? `${committed}\n${activeLine}`
-                    : activeLine;
-                  setCommitted(nextCommitted);
-                  setActiveLine("");
-                  saveBody(nextCommitted);
-                }
-              }}
-            />
-          )}
-        </div>
+        <MarkdownContent className="text-body" text={tile.config.body} />
       )}
     </>
   );
@@ -712,10 +506,7 @@ export function QuickAppend({
     observer.observe(article);
     return () => observer.disconnect();
   }, []);
-  const todo = tile.type === "data";
-  const full = todo
-    ? tile.config.items.length >= 30
-    : tile.config.body.length >= 10000;
+  const full = tile.config.items.length >= 30;
   return (
     <div ref={ref} className="quick-append" hidden={!room}>
       {open ? (
@@ -724,37 +515,20 @@ export function QuickAppend({
             e.preventDefault();
             const text = draft.trim();
             if (!text || full) return;
-            if (todo)
-              onConfig({
-                items: [
-                  ...tile.config.items,
-                  { id: crypto.randomUUID(), text, done: false },
-                ],
-              });
-            else {
-              const body = [tile.config.body, text]
-                .filter(Boolean)
-                .join("\n\n");
-              if (body.length > 10000) return;
-              onConfig({ body });
-            }
+            onConfig({
+              items: [
+                ...tile.config.items,
+                { id: crypto.randomUUID(), text, done: false },
+              ],
+            });
             setDraft("");
             setOpen(false);
           }}
         >
           <textarea
             autoFocus
-            aria-label={todo ? "Nuova attività" : "Testo da aggiungere"}
-            maxLength={
-              todo
-                ? 300
-                : Math.max(
-                    0,
-                    10000 -
-                      tile.config.body.length -
-                      (tile.config.body ? 2 : 0),
-                  )
-            }
+            aria-label="Nuova attività"
+            maxLength={300}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -768,12 +542,12 @@ export function QuickAppend({
             <button type="button" onClick={() => setOpen(false)}>
               Annulla
             </button>
-            <button disabled={!draft.trim() || full}>Aggiungi</button>
+            <button disabled={!draft.trim() || full}>Aggiungi attività</button>
           </div>
         </form>
       ) : (
         <button disabled={full} onClick={() => setOpen(true)}>
-          <Plus size={14} /> {todo ? "Aggiungi attività" : "Aggiungi testo"}
+          <Plus size={14} /> Aggiungi attività
         </button>
       )}
     </div>

@@ -170,7 +170,10 @@ function Login({
 }
 
 const KEYBOARD_SHORTCUTS = [
-  ["Qualsiasi tasto", "Inizia subito a scrivere nella barra e scegli cosa aggiungere"],
+  [
+    "Qualsiasi tasto",
+    "Inizia subito a scrivere nella barra e scegli cosa aggiungere",
+  ],
   ["E", "Attiva o termina la modalità modifica"],
   ["+", "Catalogo per aggiungere una tile"],
   ["? ", "Mostra le scorciatoie da tastiera"],
@@ -518,7 +521,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     );
     setVaultOpen(null);
     setExpandedId(id);
-    // Note tiles ("text") are always edited inline directly on the tile without opening a separate form
+    // Notes are edited directly in the open document; desktop tiles stay read-only.
     setEditingNote(targetTile?.type === "text" ? false : edit);
   };
   const openVaultSide = (folder = "", path = "") => {
@@ -959,15 +962,21 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     }
     const box = e.currentTarget.getBoundingClientRect();
     if (!box.width || !box.height) return;
-    const px = Math.max(-0.5, Math.min(0.5, (e.clientX - box.left) / box.width - 0.5));
-    const py = Math.max(-0.5, Math.min(0.5, (e.clientY - box.top) / box.height - 0.5));
-    const max = 16 / Math.pow(Math.max(t.w, t.h), 0.35);
+    const px = Math.max(
+      -0.5,
+      Math.min(0.5, (e.clientX - box.left) / box.width - 0.5),
+    );
+    const py = Math.max(
+      -0.5,
+      Math.min(0.5, (e.clientY - box.top) / box.height - 0.5),
+    );
+    const max = 6 / Math.pow(Math.max(t.w, t.h), 0.35);
     article.style.setProperty("--ry", `${(px * 2 * max).toFixed(2)}deg`);
     article.style.setProperty("--rx", `${(-py * 2 * max).toFixed(2)}deg`);
-    article.style.setProperty("--px", `${(px * 16).toFixed(1)}px`);
-    article.style.setProperty("--py", `${(py * 16).toFixed(1)}px`);
-    article.style.setProperty("--sx", `${(-px * 24).toFixed(1)}px`);
-    article.style.setProperty("--sy", `${(-py * 24 + 16).toFixed(1)}px`);
+    article.style.setProperty("--px", `${(px * 6).toFixed(1)}px`);
+    article.style.setProperty("--py", `${(py * 6).toFixed(1)}px`);
+    article.style.setProperty("--sx", `${(-px * 10).toFixed(1)}px`);
+    article.style.setProperty("--sy", `${(-py * 10 + 6).toFixed(1)}px`);
     article.style.setProperty("--mx", `${((px + 0.5) * 100).toFixed(1)}%`);
     article.style.setProperty("--my", `${((py + 0.5) * 100).toFixed(1)}%`);
     article.style.setProperty("--tilt", "1");
@@ -1042,9 +1051,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
               t.type === "data" ||
               t.type === "folder" ||
               t.type === "file") &&
-            !(e.target as HTMLElement).closest(
-              "button,a,input,textarea,.inline-note-surface,.text-headline",
-            )
+            !(e.target as HTMLElement).closest("button,a,input,textarea")
           ) {
             if (t.type === "folder") {
               if (t.config.vaultPath) openVaultSide(t.config.vaultPath, "");
@@ -1081,7 +1088,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             onTimerFinish={onTimerFinish}
           />
         </div>
-        {!editing && (t.type === "text" || t.type === "data") && (
+        {!editing && t.type === "data" && (
           <QuickAppend
             tile={t}
             onConfig={(patch) => patchConfig(t.id, patch)}

@@ -1,4 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+import { createTile } from "../../packages/shared/model";
 const password = "browser-test-password";
 // Login is rate limited (8 per minute), so sign in once and reuse the session.
 let session: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
@@ -521,14 +522,16 @@ test("folders hold child tiles and persist them", async ({ page }) => {
   ).toHaveCount(0);
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
   await page.keyboard.press("Escape");
-  await expect(folderTile.getByText("1 elemento")).toBeVisible();
+  await expect(
+    folderTile.getByRole("button", { name: /Apri cartella/ }),
+  ).toHaveText(/Apri cartella \(1\)/);
   await page.reload();
   await expect(
     page
       .getByTestId("tile-folder")
       .filter({ hasText: "Progetto alfa" })
-      .getByText("1 elemento"),
-  ).toBeVisible();
+      .getByRole("button", { name: /Apri cartella/ }),
+  ).toHaveText(/Apri cartella \(1\)/);
 });
 
 test("settings open fullscreen with sections for agents, data and security", async ({
@@ -883,7 +886,7 @@ test("hover tilts the actual tile surface", async ({ page }) => {
     .not.toBe("");
 });
 
-test("tall notes and todos accept inline additions and keep opaque text", async ({
+test("tall notes stay read-only while todos accept inline additions and keep opaque text", async ({
   page,
 }) => {
   const initial = await (await page.request.get("/api/desktop")).json();
@@ -902,13 +905,10 @@ test("tall notes and todos accept inline additions and keep opaque text", async 
   expect(response.ok()).toBe(true);
   await page.reload();
   const noteTile = page.getByTestId("tile-text");
-  await noteTile
-    .getByRole("button", { name: "Aggiungi testo", exact: true })
-    .click();
-  await noteTile
-    .getByRole("textbox", { name: "Testo da aggiungere" })
-    .fill("Testo inserito dal desktop");
-  await noteTile.getByRole("button", { name: "Salva nota" }).click();
+  await expect(noteTile.locator("input,textarea")).toHaveCount(0);
+  await expect(
+    noteTile.getByRole("button", { name: "Aggiungi testo" }),
+  ).toHaveCount(0);
   const todoTile = page.getByTestId("tile-data");
   await todoTile
     .getByRole("button", { name: "Aggiungi attività", exact: true })
@@ -916,10 +916,12 @@ test("tall notes and todos accept inline additions and keep opaque text", async 
   await todoTile
     .getByRole("textbox", { name: "Nuova attività" })
     .fill("Attività dal desktop");
-  await todoTile.getByRole("button", { name: "Salva nota" }).click();
+  await todoTile
+    .getByRole("button", { name: "Aggiungi attività", exact: true })
+    .click();
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
   await page.reload();
-  await expect(noteTile).toContainText("Testo inserito dal desktop");
+  await expect(noteTile).toContainText(note.title);
   await expect(todoTile).toContainText("Attività dal desktop");
   await expect(noteTile.locator("article")).toHaveCSS("opacity", "1");
   expect(
@@ -1080,7 +1082,9 @@ test("performance, AI limits, DJ Osso Radio tiles, inline live-Markdown note edi
   await expect(aiTile).toBeVisible();
   await expect(aiTile).toContainText("Claude Max");
   await page.getByRole("button", { name: "Fine", exact: true }).click();
-  await aiTile.getByRole("button", { name: /Aggiorna quota Claude Max/ }).click();
+  await aiTile
+    .getByRole("button", { name: /Aggiorna quota Claude Max/ })
+    .click();
   await expect(aiTile).toContainText("75%");
 
   await page.keyboard.press("+");
@@ -1092,34 +1096,54 @@ test("performance, AI limits, DJ Osso Radio tiles, inline live-Markdown note edi
 
   // 3. Type-anywhere on desktop: typing directly on the keyboard focuses capture bar,
   //    lets user choose Nota or Todo, and multi-line text does NOT shrink desktop-main
-  const mainHeightBefore = (await page.locator(".desktop-main").boundingBox())!.height;
+  const mainHeightBefore = (await page.locator(".desktop-main").boundingBox())!
+    .height;
   await page.keyboard.type("Idea veloce dal desktop");
   const captureInput = page.getByRole("textbox", { name: "Appunta qualcosa" });
   await expect(captureInput).toHaveValue("Idea veloce dal desktop");
-  await expect(page.getByRole("group", { name: "Scegli cosa aggiungere" })).toBeVisible();
-  await captureInput.fill(Array.from({ length: 10 }, (_, i) => `Riga molto lunga numero ${i + 1}`).join("\n"));
-  const mainHeightDuring = (await page.locator(".desktop-main").boundingBox())!.height;
+  await expect(
+    page.getByRole("group", { name: "Scegli cosa aggiungere" }),
+  ).toBeVisible();
+  await captureInput.fill(
+    Array.from(
+      { length: 10 },
+      (_, i) => `Riga molto lunga numero ${i + 1}`,
+    ).join("\n"),
+  );
+  const mainHeightDuring = (await page.locator(".desktop-main").boundingBox())!
+    .height;
   expect(mainHeightDuring).toBe(mainHeightBefore);
   await page.getByRole("button", { name: "Salva nota" }).click();
 
   // 4. Long text tile on the desktop scrolls with mouse wheel on hover without opening it
-  const longNoteTile = page.getByTestId("tile-text").filter({ hasText: "Riga molto lunga numero 1" });
+  const longNoteTile = page
+    .getByTestId("tile-text")
+    .filter({ hasText: "Riga molto lunga numero 1" });
   await expect(longNoteTile).toBeVisible();
   const textBody = longNoteTile.locator(".text-body");
   const scrollMetrics = await textBody.evaluate((el) => ({
     scrollHeight: el.scrollHeight,
     clientHeight: el.clientHeight,
   }));
-  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+  expect(scrollMetrics.scrollHeight).toBeGreaterThan(
+    scrollMetrics.clientHeight,
+  );
 
   // 5. 3D Parallax on tile hover sets --rx, --ry, --px, --py, --tilt
   const tileBox = (await longNoteTile.boundingBox())!;
-  await page.mouse.move(tileBox.x + tileBox.width * 0.85, tileBox.y + tileBox.height * 0.2);
-  const tiltVal = await longNoteTile.locator("article").evaluate((el) => el.style.getPropertyValue("--tilt"));
+  await page.mouse.move(
+    tileBox.x + tileBox.width * 0.85,
+    tileBox.y + tileBox.height * 0.2,
+  );
+  const tiltVal = await longNoteTile
+    .locator("article")
+    .evaluate((el) => el.style.getPropertyValue("--tilt"));
   expect(tiltVal).toBe("1");
 
-  // 6. Inline note editing directly on tile and in flush, resizable SideWorkspace with top color picker
-  await longNoteTile.getByRole("button", { name: /Apri Riga molto lunga/ }).click();
+  // 6. Note editing in the flush, resizable SideWorkspace with top color picker
+  await longNoteTile
+    .getByRole("button", { name: /Apri Riga molto lunga/ })
+    .click();
   const sideDialog = page.getByRole("dialog", { name: "Vista completa" });
   await expect(sideDialog).toBeVisible();
 
@@ -1127,29 +1151,255 @@ test("performance, AI limits, DJ Osso Radio tiles, inline live-Markdown note edi
   const sideBoxBefore = (await sideDialog.boundingBox())!;
   const viewportSize = page.viewportSize()!;
   expect(sideBoxBefore.y).toBe(0);
-  await expect.poll(async () => { const b = (await sideDialog.boundingBox())!; return Math.round(b.x + b.width); }).toBe(viewportSize.width);
+  await expect
+    .poll(async () => {
+      const b = (await sideDialog.boundingBox())!;
+      return Math.round(b.x + b.width);
+    })
+    .toBe(viewportSize.width);
 
   // Inner edge is resizable via the separator handle
-  const resizeHandle = sideDialog.getByRole("separator", { name: "Ridimensiona pannello laterale" });
+  const resizeHandle = sideDialog.getByRole("separator", {
+    name: "Ridimensiona pannello laterale",
+  });
   await resizeHandle.focus();
   await page.keyboard.press("ArrowLeft");
   const sideBoxAfter = (await sideDialog.boundingBox())!;
   expect(sideBoxAfter.width).toBeGreaterThan(sideBoxBefore.width);
 
   // Top color picker changes the tile background directly without opening settings
-  const colorGroup = sideDialog.getByRole("group", { name: "Colore sfondo tile" });
+  const colorGroup = sideDialog.getByRole("group", {
+    name: "Colore sfondo tile",
+  });
   await expect(colorGroup).toBeVisible();
   await colorGroup.locator("button").nth(3).click();
-  await expect(colorGroup.locator("button").nth(3)).toHaveAttribute("aria-pressed", "true");
+  await expect(colorGroup.locator("button").nth(3)).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   // Inline live-Markdown editor: renders Markdown only after pressing Enter, and can toggle to plain text mode
-  const lineInput = sideDialog.getByRole("textbox", { name: "Scrivi una riga Markdown" });
+  const lineInput = sideDialog.getByRole("textbox", {
+    name: "Scrivi una riga Markdown",
+  });
   await lineInput.fill("# Titolo Inline");
   await expect(sideDialog.locator(".inline-note-markdown h1")).toHaveCount(0);
   await lineInput.press("Enter");
-  await expect(sideDialog.locator(".inline-note-markdown h1")).toHaveText("Titolo Inline");
+  await expect(sideDialog.locator(".inline-note-markdown h1")).toHaveText(
+    "Titolo Inline",
+  );
 
-  const modeBtn = sideDialog.getByRole("button", { name: "Modalità testo normale" });
+  const modeBtn = sideDialog.getByRole("button", {
+    name: "Modalità testo normale",
+  });
   await modeBtn.click();
-  await expect(sideDialog.getByRole("textbox", { name: "Contenuto nota in testo normale" })).toBeVisible();
+  await expect(
+    sideDialog.getByRole("textbox", {
+      name: "Contenuto nota in testo normale",
+    }),
+  ).toBeVisible();
+});
+
+test("note previews are read-only and clicking text opens the document", async ({
+  page,
+}) => {
+  await capture(
+    page,
+    "Nota sola lettura",
+    "Paragrafo da correggere\n\nSecondo paragrafo",
+  );
+  const tile = page
+    .getByTestId("tile-text")
+    .filter({ hasText: "Nota sola lettura" });
+  await expect(tile.locator("textarea,input")).toHaveCount(0);
+  await expect(
+    tile.getByRole("button", { name: "Aggiungi testo" }),
+  ).toHaveCount(0);
+  await tile.locator(".text-headline").click();
+  const dialog = page.getByRole("dialog", { name: "Vista completa" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByText("Paragrafo da correggere", { exact: true }).click();
+  const editor = dialog.getByRole("textbox", {
+    name: "Scrivi una riga Markdown",
+  });
+  await expect(editor).toHaveValue("Paragrafo da correggere");
+  await editor.fill("Paragrafo corretto **bene**");
+  await editor.press("Enter");
+  await expect(dialog.locator("strong")).toHaveText("bene");
+  await page.screenshot({ path: "test-results/note-editor.png" });
+  await expect(
+    dialog.getByText("Secondo paragrafo", { exact: true }),
+  ).toBeVisible();
+  await editor.fill("Ultima riga senza invio");
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+  await page.reload();
+  await tile
+    .getByRole("button", { name: "Apri Nota sola lettura", exact: true })
+    .click();
+  await expect(dialog).toContainText("Ultima riga senza invio");
+});
+
+test("small note tiles retain room for content without changing on hover", async ({
+  page,
+}) => {
+  const initial = await (await page.request.get("/api/desktop")).json();
+  const note = initial.tiles.find((t: { type: string }) => t.type === "text");
+  await page.request.put("/api/desktop", {
+    data: {
+      ...initial,
+      tiles: [
+        {
+          ...note,
+          x: 0,
+          y: 0,
+          w: 1,
+          h: 1,
+          title: "Un titolo lungo che deve lasciare spazio al contenuto",
+          config: { ...note.config, body: "Testo della nota leggibile" },
+        },
+      ],
+      settings: { ...initial.settings, rows: 6 },
+    },
+  });
+  await page.reload();
+  const tile = page.getByTestId("tile-text");
+  const body = tile.locator(".text-body");
+  await expect(body).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.mouse.move(0, 0);
+  // Start after the initial grid measurement and entrance transition settle.
+  await page.waitForTimeout(400);
+  const before = await body.evaluate((el) => el.clientHeight);
+  expect(before).toBeGreaterThanOrEqual(20);
+  await tile.hover();
+  await page.waitForTimeout(300);
+  const after = await body.evaluate((el) => el.clientHeight);
+  expect(after).toBe(before);
+});
+
+test("tile content adapts to narrow boxes and changing window sizes", async ({
+  page,
+}) => {
+  const initial = await (await page.request.get("/api/desktop")).json();
+  const types = [
+    "text",
+    "data",
+    "clock",
+    "performance",
+    "ai_limits",
+    "radio",
+    "progress",
+    "folder",
+  ] as const;
+  const tiles = types.map((type, i) => {
+    const tile = createTile(type, [], { w: 1, h: 1 });
+    tile.x = i % 4;
+    tile.y = Math.floor(i / 4);
+    tile.config.body =
+      type === "text"
+        ? "Un paragrafo leggibile anche quando il tile cambia dimensione."
+        : tile.config.body;
+    if (type === "progress") {
+      tile.config.startsAt = new Date().toISOString();
+      tile.config.endsAt = new Date(Date.now() + 3600000).toISOString();
+    }
+    return tile;
+  });
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: {
+          ...initial,
+          tiles,
+          settings: { ...initial.settings, columns: 8, rows: 5 },
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 1000, height: 800 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect
+      .poll(() =>
+        page
+          .locator(".tile-shell > article")
+          .evaluateAll((els) =>
+            els
+              .filter((el) => el.scrollWidth > el.clientWidth + 1)
+              .map((el) => el.className),
+          ),
+      )
+      .toEqual([]);
+    const folderBounds = await page.locator(".tile-folder").boundingBox();
+    const folderAction = await page
+      .locator(".tile-folder .tile-expand")
+      .boundingBox();
+    expect(folderAction!.y + folderAction!.height).toBeLessThanOrEqual(
+      folderBounds!.y + folderBounds!.height + 1,
+    );
+    for (const selector of [".perf-tile", ".ai-limits-tile", ".radio-tile"]) {
+      await expect
+        .poll(() =>
+          page
+            .locator(selector)
+            .evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
+        )
+        .toBe(true);
+    }
+    await page.screenshot({
+      path: `test-results/tile-resize-${viewport.width}.png`,
+      fullPage: true,
+    });
+  }
+});
+
+test("note blocks preserve Markdown, support undo and respect the body limit", async ({
+  page,
+}) => {
+  const source =
+    "Primo paragrafo\n\n- uno\n- due\n\n```ts\nconst x = 1;\n```\n\nUltimo paragrafo";
+  await capture(page, "Documento strutturato", source);
+  const tile = page
+    .getByTestId("tile-text")
+    .filter({ hasText: "Documento strutturato" });
+  await tile
+    .getByRole("button", { name: "Apri Documento strutturato", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Vista completa" });
+  await dialog.getByText("Primo paragrafo", { exact: true }).click();
+  const editor = dialog.getByRole("textbox", {
+    name: "Scrivi una riga Markdown",
+  });
+  await editor.fill("Paragrafo corretto");
+  await editor.press("Enter");
+  await editor.press("ControlOrMeta+z");
+  await expect(editor).toHaveValue("Paragrafo corretto");
+  await editor.press("ControlOrMeta+z");
+  await expect(editor).toHaveValue("Primo paragrafo");
+  await dialog.getByText("const x = 1;", { exact: true }).click();
+  await expect(editor).toHaveValue("```ts\nconst x = 1;\n```");
+  await editor.fill("```ts\nconst x = 2;\n```");
+  await dialog.getByRole("button", { name: "Modalità testo normale" }).click();
+  const plain = dialog.getByRole("textbox", {
+    name: "Contenuto nota in testo normale",
+  });
+  await expect(plain).toHaveValue(source.replace("x = 1", "x = 2"));
+  await expect(plain).toHaveAttribute("maxlength", "10000");
+  await plain.fill("a".repeat(10000));
+  await dialog
+    .getByRole("button", { name: "Modalità Markdown compilato" })
+    .click();
+  await editor.press("Enter");
+  await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
+  const saved = await (await page.request.get("/api/desktop")).json();
+  expect(
+    saved.tiles.find(
+      (t: { title: string }) => t.title === "Documento strutturato",
+    ).config.body,
+  ).toHaveLength(10000);
 });
