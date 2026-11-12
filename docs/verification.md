@@ -15,7 +15,17 @@ Ambiente osservato: macOS, Node **26.12.1**, npm **11.20.0**, Google Chrome loca
 | Node 24 e Chromium gestito | **Delegati alla CI** su Ubuntu; questa esecuzione locale usa Node 26 e Chrome                     |
 | README inglese e link      | **Superato**: nessun link locale o immagine mancante nel repository                               |
 | Workflow GitHub            | **Sintassi YAML valida**; prima esecuzione reale delegata a GitHub Actions                        |
-| Tag e versione             | `v0.1.0` corrisponde a `package.json`; pubblicazione non ancora eseguita                          |
+| Tag e versione             | `v0.1.0` corrisponde a `package.json`                                                             |
+| GitHub Release             | **Pubblicata**: <https://github.com/Duccioo/EDON/releases/tag/v0.1.0>                             |
+| Immagine GHCR              | **Pubblicata** per `linux/amd64` e `linux/arm64`; manifest anonimo accessibile                    |
+
+## Pubblicazione v0.1.0
+
+- Workflow Release completato con successo su GitHub Actions dopo la correzione del test sull’altezza del dock.
+- Immagine: `ghcr.io/duccioo/edon:0.1.0`, `:0.1` e `:latest`.
+- Digest dell’indice multi-architettura: `sha256:a38e66b011fac1b8029e93b7b3eb76da74cf7a8fe6ce2d24d5687a777a017d67`.
+- CI del commit di release completata con successo su Node 24.
+- Il container pubblicato non è stato avviato manualmente su questa macchina locale; build, test e pubblicazione multi-architettura sono stati eseguiti dalla CI.
 
 Le regressioni aggiunte coprono token vault in sola lettura, note non modificabili senza perdite, versioni Markdown, scritture atomiche, symlink, conflitti senza effetti parziali, collegamento di note non vuote, richieste fuori ordine, upload tardivi e workspace mobili. Non si deduce un esito positivo dai verbali storici.
 
