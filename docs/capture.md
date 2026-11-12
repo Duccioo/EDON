@@ -1,4 +1,6 @@
-# Cattura, contenuti e archivio
+# Cattura, contenuti e archivio — storico
+
+> Verifica storica del 17 ottobre 2026; non è un verbale della release corrente. Per il comportamento attuale vedi [desktop.md](desktop.md) e [obsidian.md](obsidian.md).
 
 Revisione del 17 ottobre 2026. Il flusso principale è scrivere e salvare senza passare dal catalogo.
 
@@ -12,4 +14,4 @@ Revisione del 17 ottobre 2026. Il flusso principale è scrivere e salvare senza 
 
 Verifica: 28 test automatici superati, build TypeScript/Vite e Prettier superati. Nel browser integrato a 1440×900: cattura TODO con testo Markdown, archiviazione/ripristino, upload e lettura GIF, nota 3×3 persistente dopo reload, percorso AI senza configurazione, composizione senza overflow con barra espansa. Suite Playwright aggiornata ma non eseguita integralmente.
 
-Schermata locale: `test-results/capture-review/desktop-capture.png`. Vite segnala un bundle JavaScript superiore a 500 kB (circa 160 kB gzip).
+Gli screenshot correnti sono in [`docs/screenshots`](screenshots/). Vite segnala un bundle JavaScript superiore a 500 kB.

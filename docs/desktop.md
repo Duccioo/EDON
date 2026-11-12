@@ -1,135 +1,68 @@
 # Guida al desktop
 
-Tutto quello che EDON sa fare dal browser: tile, cartelle, impostazioni,
-scorciatoie, backup e limiti. Per l'interfaccia HTTP e gli agenti vedi
-[api.md](api.md) e [agents.md](agents.md).
+Per Obsidian vedi [obsidian.md](obsidian.md); per HTTP, token e agenti vedi [api.md](api.md) e [agents.md](agents.md).
 
-## Vista e modifica
+## Layout e modifica
 
-Il desktop ha due modi:
+- **Vista** usa link, spunte, player e cartelle. **Modifica** (**E** o menu **+**) abilita trascinamento, maniglia di ridimensionamento e ispettore.
+- Colonne e righe sono dinamiche e si configurano separatamente in **Aspetto** (2–12 colonne, 2–128 righe). Una riduzione viene rifiutata se non può contenere tutte le tile; nessun contenuto viene eliminato implicitamente.
+- Da **900×600 px** la griglia riempie l’area tra intestazione e comandi, con celle eventualmente rettangolari. Sotto queste dimensioni la vista scorre; tra 600 e 899 px usa quattro colonne e fino a **599 px una colonna**. Le coordinate logiche salvate non cambiano.
+- Il limite iniziale è 24 tile, configurabile fino a 100. Note e TODO arrivano a 3 colonne e tutte le righe disponibili, file a 3×3, gli altri tipi a 2×2.
+- Le tile vicine restano ferme: è possibile occupare spazio libero o scambiare due tile delle stesse dimensioni. **Compatta** le sposta verso l’alto a sinistra solo su richiesta.
 
-- **Vista**: le tile sono interattive (link, spunte, orologi, cartelle).
-  I controlli di modifica sono nascosti.
-- **Modifica** (pulsante nel menu **+**, oppure tasto **E**): trascina le tile,
-  ridimensionale dall'angolo in basso a destra, selezionale per aprire
-  l'ispettore. La griglia delle celle libere diventa più evidente.
+## Cattura e documenti
 
-Regole di disposizione:
+La barra **Appunta qualcosa** accetta Markdown e riconosce i link. **Todo** converte le righe `- [ ]` / `- [x]` conservando il resto del testo. Graffetta, incolla e trascinamento aggiungono immagini/GIF; ⌘/Ctrl+Invio salva e libera il campo, mentre un errore conserva la bozza.
 
-- Griglia con colonne e righe configurabili separatamente in Aspetto; note e TODO fino a 3 colonne e tutte le righe disponibili; collegamenti, immagini, orologi e cartelle fino a 2×2. Tutte le combinazioni intermedie sono disponibili. Le celle non usate restano visibili in modo leggero.
-- Su desktop da 900×600 px usa tutta la larghezza e l’altezza disponibili tra intestazione e dock. Le celle possono essere rettangolari: tutte le tile restano visibili senza scorrere.
-- Limite iniziale di 24 tile, modificabile in Impostazioni → Aspetto. Vale anche per duplicazioni e agenti; non si possono rimuovere tile implicitamente abbassandolo.
-- Le tile vicine **restano ferme**: trascinando sopra una tile occupata, due
-  tile **delle stesse dimensioni** si scambiano di posto; gli altri spostamenti
-  vengono annullati con un avviso.
-- **Compatta** (visibile in modifica) sposta le tile verso l'alto a sinistra
-  rimuovendo gli spazi vuoti.
-- Su schermi sotto i 690 px la composizione diventa una colonna a due
-  voci; trascinamento e ridimensionamento sono disponibili dai 650 px in su,
-  altrimenti si usano ispettore e pulsanti.
+Note e TODO si aprono nel documento laterale. Le note si modificano per blocchi o come sorgente Markdown, con salvataggio automatico e annulla/ripristina. Le anteprime sul desktop non entrano in editing; i TODO consentono spunte e aggiunta rapida. **Esc** chiude il pannello.
 
-## La barra in basso
+Il menu **+** contiene Aggiungi tile, Modifica, Esplora Vault, eventuale Archivio locale, scorciatoie e Impostazioni. **Aggiungi tile → Crea con agenti AI** apre il flusso Hermes.
 
-- **Appunta qualcosa**: scrivi subito nella barra; larghezza e altezza crescono gradualmente. ⌘/Ctrl + Invio o la freccia salvano senza aprire altre viste.
-- **Todo**: trasforma le righe Markdown `- [ ]` e `- [x]` in attività. Testo introduttivo, immagini e codice rimangono nel contenuto; disattivalo per salvare una nota normale.
-- **Graffetta**: aggiunge immagini/GIF alla nota. Sono supportati anche incolla e trascinamento, con gli stessi limiti degli upload (10 MB per file).
-- **Anteprima**: mostra il Markdown prima del salvataggio. Un errore, compreso il desktop pieno, conserva la bozza.
-- **+**: Aggiungi tile, Modifica, Archivio e Impostazioni. **Aggiungi tile → Crea con agenti AI** apre la richiesta all’agente; non c’è più un campo ricerca/AI nel dock.
-- In modifica compaiono **Compatta** e **Fine**.
+## Tipi di tile
 
-## Le tile
+| Tipo                        | Contenuto e comportamento                                      |
+| --------------------------- | -------------------------------------------------------------- |
+| Collegamento (`link`)       | URL HTTP/HTTPS o `obsidian://`, icona e immagine               |
+| Immagine (`image`)          | PNG, JPEG, WebP o GIF caricato oppure HTTPS; riempi/contieni   |
+| Nota (`text`)               | Markdown, documento laterale, eventuale file vault collegato   |
+| TODO (`data`)               | Testo e massimo 30 checklist, filtri e avanzamento             |
+| Orologio (`clock`)          | Fuso IANA, per esempio `Europe/Rome`; vuoto = dispositivo      |
+| Cartella (`folder`)         | Fino a 24 mini-tile oppure directory del vault                 |
+| Meteo (`weather`)           | Condizioni attuali Open-Meteo, cache di 10 minuti              |
+| Timer/scadenza (`progress`) | Avanzamento tra `startsAt` e `endsAt`, con pausa               |
+| File (`file`)               | PDF con anteprima della prima pagina; altri file come download |
+| Prestazioni (`performance`) | CPU, RAM, disco, carico e uptime del server                    |
+| Quote AI (`ai_limits`)      | Voci manuali su limiti e reset delle sottoscrizioni            |
+| Radio (`radio`)             | Player dello stream HTTPS configurato                          |
 
-| Tipo         | Contenuto               | Dettagli                                                                                                   |
-| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Collegamento | Titolo, icona, URL      | `https://`, `http://`, `obsidian://`. Apre una nuova scheda (gli URI `obsidian://` usano l'app associata). |
-| Immagine     | PNG, JPEG, WebP, GIF    | File caricati (max 10 MB) o URL HTTPS. Riempi/contieni, didascalia opzionale.                              |
-| Testo        | Nota Markdown           | Anteprima nel desktop, vista completa con un clic, scorrevole per i testi lunghi.                          |
-| Elenco       | Testo + voci spuntabili | Righe `- [ ]` / `- [x]` nell’editor Markdown. Le spunte funzionano anche in anteprima.                     |
-| Orologio     | Ora e data              | Fuso IANA (`Europe/Rome`, `Asia/Tokyo`); vuoto = ora del dispositivo.                                      |
-| Cartella     | Fino a 24 mini-tile     | Si apre in una vista dedicata; vedi sotto.                                                                 |
-
-Ogni tile ha titolo, sottotitolo, colori, tipografia e immagine di sfondo
-propri (ispettore → Aspetto, preset Minimal / Dot / Industrial / Soft Glass).
-Forma, bordi, padding, opacità ed effetto vetro sono invece **globali**
-(Impostazioni → Aspetto) e si applicano a tutte le tile.
-
-Vista completa (testo, elenchi): clic sulla tile o **Leggi nota / Apri
-lista**; il desktop sfoca dietro, **Esc** chiude. Da lì **Modifica** ed
-**Archivia** oppure **Elimina** (con conferma). L’archiviazione è disponibile anche con un pulsante sulla tile. **+ → Archivio** raccoglie note e TODO archiviati, leggibili e ripristinabili senza perdere contenuti. Il ripristino richiede spazio e rispetta il limite del desktop.
+Ogni tile ha colori, tipografia e immagine propri. Forma, bordo, padding, opacità ed effetto vetro sono globali. Il testo usa automaticamente bianco o nero in base al colore di sfondo quando questo viene cambiato senza scegliere un colore testo esplicito.
 
 ## Cartelle
 
-La tile **Cartella** organizza fino a 24 elementi (collegamenti, note,
-liste, immagini, orologi) senza occupare griglia extra.
+Le cartelle non si annidano e non consumano una posizione per ogni elemento. Accettano collegamenti, immagini, note, TODO e orologi.
 
-1. **+** → Aggiungi tile → **Cartella** (occupa 2×2, ridimensionabile).
-2. Clic sulla cartella (o **Apri cartella**) per entrare: pulsanti
-   Link / Nota / Lista / Immagine / Orologio aggiungono un elemento.
-3. Ogni elemento si **modifica** (matita) o **rimuove** (cestino); le spunte
-   delle liste funzionano dentro la cartella; i link si aprono normalmente.
-4. L'anteprima mostra i primi 4 elementi e il conteggio.
+1. Crea **Cartella** da **Aggiungi tile**.
+2. Aprila e usa **Aggiungi tile** per scegliere tile già presenti sul desktop, oppure trascina una tile compatibile sopra la cartella in modifica e attendi l’attivazione.
+3. Modifica o rimuovi gli elementi; **Sposta sul desktop** li estrae nel primo spazio libero.
 
-Limiti (versione attuale):
+Gli agenti possono gestire `config.children`. Per una cartella vault, `config.vaultPath` è la directory relativa o `*`.
 
-- Un solo livello: le cartelle **non si annidano**.
-- Gli elementi vivono dentro la cartella: non si spostano con drag & drop
-  tra desktop e cartella (ricreali dove servono).
-- Gli agenti possono creare cartelle e gestirne gli elementi via
-  `config.children` (vedi `GET /api/tile-types`).
+## Wallpaper e impostazioni
 
-## Impostazioni
+**Impostazioni → Aspetto** offre anteprima live, nome del desktop, griglia, limite tile, distanza, forma, bordi, opacità, vetro e palette. Gli sfondi disponibili sono **Pieghe**, **Tinta unita**, **Gradiente**, **Immagine**, **ASCII** e **Rumore**. Gli ultimi due sono animati e rispettano `prefers-reduced-motion`; l’immagine accetta PNG, JPEG, WebP o GIF fino a 10 MB.
 
-Il pulsante **Impostazioni** apre una pagina a tutto schermo con sezioni:
+Le altre sezioni gestiscono Hermes, token, password, dati/backup, Obsidian e informazioni. Le chiavi Hermes salvate via UI sono in chiaro nel database; quelle fornite via ambiente restano nell’ambiente del processo.
 
-- **Aspetto**: angoli, bordo, spazio interno, opacità, vetro, spazio tra
-  tile; sfondo (pieghe, tinta unita, gradiente, immagine caricata); nome
-  del desktop.
-- **Agente AI**: indirizzo, chiave e modello di Hermes + verifica
-  connessione. Gestibile anche via `HERMES_URL`, `HERMES_API_KEY`,
-  `HERMES_MODEL` (l'ambiente prevale).
-- **Agenti e token**: crea/revoca token Bearer per Hermes, MCP e script
-  (solo creazione/aggiornamento tile, mai lettura del resto).
-- **Sicurezza**: cambio password (minimo 10 caratteri) ed uscita dal
-  dispositivo. Le sessioni durano 7 giorni.
-- **Dati e backup**: conteggi (tile, cartelle, tile degli agenti,
-  revisione), **esportazione JSON**, **importazione** (sostituisce il
-  desktop dopo validazione), ripristino del desktop iniziale.
-- **Integrazioni**: Obsidian (`obsidian://`, nessuna configurazione),
-  MCP/API; Paperless-ngx e Google Calendar sono annunciati come prossimi.
-- **Info**: versione, revisione dati, scorciatoie, indice della
-  documentazione.
+## Archivio ed eliminazione
 
-Tutte le modifiche alle impostazioni si salvano automaticamente (attendi
-**Tutto salvato**). L'importazione dal **+** della barra non esiste:
-l'import è solo in Impostazioni → Dati e backup.
+Senza vault, **Archivia** sposta note/TODO nell’archivio locale (massimo 1.000), incluso nell’export JSON. Il ripristino richiede spazio e rispetta il limite tile. Con il vault attivo l’archiviazione rimuove solo il pin e conserva il Markdown; il menu Archivio locale viene nascosto.
 
-## Scorciatoie
+Eliminare una nota collegata al vault sposta il file nella cartella cestino configurata, non lo cancella definitivamente. Le altre eliminazioni e il ripristino iniziale richiedono attenzione; vedi [archivio, eliminazione e backup](obsidian.md#archivio-eliminazione-e-backup).
 
-- **E**: entra/esce dalla modifica.
-- **Esc**: chiude viste, cartelle, menu e impostazioni; in modifica deseleziona.
-- **⌘/Ctrl + Invio**: salva la cattura o la modifica di una nota/TODO.
+## Upload, backup e limiti
 
-## Backup e ripristino
-
-- `data/desktop.sqlite`: desktop, impostazioni, password (scrypt), sessioni
-  (hash), token (hash). `data/uploads/`: immagini caricate.
-- Backup semplice: arresta il server e copia l'intera directory `data/`.
-- Export/import JSON, archivio incluso, dalla pagina Dati e backup (le immagini caricate
-  restano su disco e vanno copiate a parte).
-- I file caricati non vengono eliminati quando rimuovi una tile: nessuna
-  raccolta automatica per ora.
-
-## Limiti noti
-
-- Massimo 100 tile nel desktop, 1.000 note/TODO in archivio, 30 voci per elenco, 24 elementi per cartella. Note fino a 10.000 caratteri; ogni attività fino a 300 caratteri.
-- Le tile degli agenti non si spostano/eliminano dal browser se create
-  dall'utente e viceversa (vedi [agents.md](agents.md)).
-- Nessun JavaScript personalizzato nelle tile. Il Markdown di note e TODO ignora HTML incorporato e collegamenti non sicuri.
-- Le chiavi Hermes salvate dall'interfaccia stanno in chiaro nel database,
-  come il resto della configurazione.
-
-- Le nuove griglie partono da 8 colonne; in Aspetto si scelgono 4, 8 o 12 colonne. I layout precedenti mantengono il numero di colonne salvato. La vista intermedia dispone i tile su quattro colonne; sotto 600 px diventa una lista, senza cambiare le coordinate salvate.
-- L’opacità regola il solo colore di sfondo dei tile: testo e pulsanti restano leggibili.
-- In modifica, sostare per 650 ms con un tile sopra una cartella la ingrandisce: rilasciando il tile viene inserito nella cartella. Cartelle piene e tipi non supportati non vengono attivati.
-- Note e TODO mostrano “Aggiungi testo” o “Aggiungi attività” quando il tile offre spazio sufficiente. Il contenuto viene aggiunto in coda senza aprire la vista completa.
-- Lo sfondo circolare conserva il disegno in un canvas di massimo 2048 × 2048 pixel e lo ruota senza ridisegnare i caratteri a ogni frame. L’animazione resta ferma con movimento ridotto e sospende il disegno nelle schede nascoste.
+- `/api/uploads` serve immagini per note e wallpaper. Il drag & drop sul desktop usa `/api/files` e accetta qualsiasi file non vuoto fino a 10 MB. Formati sconosciuti vengono forzati al download; SVG caricati non vengono renderizzati come immagini.
+- `data/desktop.sqlite` contiene documento, impostazioni e credenziali derivate; `data/uploads/` contiene tutti i file.
+- **Dati e backup → Esporta JSON** esporta desktop e archivio locale, non upload né vault. L’import sostituisce il desktop validato.
+- Per un backup completo arresta il server e copia `data/` con `-wal`/`-shm`, più il vault separatamente. Non esiste garbage collection degli upload non più referenziati.
+- Note fino a 10.000 caratteri, attività fino a 300 caratteri, 30 voci per TODO e 24 elementi per cartella. Nessun JavaScript personalizzato viene eseguito; HTML Markdown incorporato e URL non sicuri vengono bloccati.

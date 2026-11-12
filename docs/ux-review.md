@@ -1,4 +1,6 @@
-# Revisione UX — 17 ottobre 2026
+# Revisione UX — 17 ottobre 2026 (storico)
+
+> Documento storico: flussi ed esiti si riferiscono alla revisione indicata, non allo stato corrente della release.
 
 Revisione del desktop, lettura e modifica Note, creazione e gestione Todo, barra strumenti e adattamento mobile. Riferimento indicato: [CocoonFE](https://github.com/inssekt/CocoonFE). Il movimento proposto collega apertura e chiusura alla tile; non è una replica misurata dei tempi di Cocoon.
 
@@ -18,16 +20,7 @@ Manteniamo colori delle tile, Space Grotesk, Doto e caratteri editoriali scelti 
 
 ## Evidenze locali
 
-Le schermate sono in `test-results/ux-review/` (directory delle verifiche esclusa da Git). Le immagini iniziali provengono dal desktop esistente; i flussi che scrivono dati sono stati provati su un server separato con database temporaneo. I confronti iniziale/finale usano viewport differenti e documentano il comportamento, non un confronto pixel per pixel.
-
-1. [Desktop iniziale](../test-results/ux-review/01-desktop-before.png)
-2. [Lettura nota iniziale](../test-results/ux-review/02-note-before.png)
-3. [Desktop aggiornato](../test-results/ux-review/03-desktop-after.png)
-4. [Vista Todo](../test-results/ux-review/04-todo-after.png)
-5. [Editor Note](../test-results/ux-review/05-note-editor-after.png)
-6. [Lettura Note](../test-results/ux-review/06-note-after.png)
-7. [Mobile](../test-results/ux-review/07-mobile-after.png)
-8. [Menu azioni](../test-results/ux-review/08-actions-after.png)
+Le schermate originali di questa revisione erano temporanee e non sono incluse nel repository. Le immagini iniziali provenivano dal desktop esistente; i flussi che scrivono dati sono stati provati su un server separato con database temporaneo. I confronti iniziale/finale usavano viewport differenti e documentano il comportamento, non un confronto pixel per pixel. Gli screenshot correnti del prodotto sono in [`docs/screenshots`](screenshots/).
 
 ## Verifiche e limiti
 

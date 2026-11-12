@@ -1,4 +1,40 @@
-# Verifica — 17 ottobre 2026
+# Verifica corrente
+
+Data: **12 novembre 2026**. Ambito: sicurezza, integrità dei dati, frontend, documentazione e release readiness GitHub.
+
+Ambiente osservato: macOS, Node **26.12.1**, npm **11.20.0**, Google Chrome locale tramite `CHROME_PATH`.
+
+| Controllo                  | Esito osservato                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `npm test`                 | **Superato**: 46/46 test                                                                          |
+| `npm run build`            | **Superato**: TypeScript e build Vite; resta un avviso non bloccante sul chunk principale >500 kB |
+| `npm run format:check`     | **Superato**                                                                                      |
+| `npm audit`                | **Superato**: zero vulnerabilità note                                                             |
+| `npm run test:e2e`         | **Superato**: 36/36 test, incluse regressioni di concorrenza, mobile, upload e conflitti          |
+| Docker/Compose             | **Non verificato localmente**: daemon e sottocomando Compose non disponibili                      |
+| Node 24 e Chromium gestito | **Delegati alla CI** su Ubuntu; questa esecuzione locale usa Node 26 e Chrome                     |
+| README inglese e link      | **Superato**: nessun link locale o immagine mancante nel repository                               |
+| Workflow GitHub            | **Sintassi YAML valida**; prima esecuzione reale delegata a GitHub Actions                        |
+| Tag e versione             | `v0.1.0` corrisponde a `package.json`; pubblicazione non ancora eseguita                          |
+
+Le regressioni aggiunte coprono token vault in sola lettura, note non modificabili senza perdite, versioni Markdown, scritture atomiche, symlink, conflitti senza effetti parziali, collegamento di note non vuote, richieste fuori ordine, upload tardivi e workspace mobili. Non si deduce un esito positivo dai verbali storici.
+
+## Modello per successive release
+
+- Data, revisione sorgente, Node/npm e sistema operativo:
+- Comandi eseguiti ed esito (includere conteggi soltanto se riportati dal runner):
+- Browser usato e modalità di installazione (`CHROME_PATH` o Chromium gestito):
+- Docker build e, se eseguita, prova del container con volume temporaneo:
+- Test manuale Obsidian su copia del vault, permessi e ripristino:
+- Problemi aperti, test non eseguiti e limiti della verifica:
+
+---
+
+# Archivio storico
+
+I verbali seguenti sono conservati come cronologia. Non dimostrano che le stesse verifiche passino oggi e non coprono le funzionalità aggiunte successivamente, fra cui Obsidian.
+
+## Verifica — 17 ottobre 2026
 
 Cartelle, impostazioni a tutto schermo, cambio password, animazioni e guida
 approfondita. Eseguita su Node 26.10.0 e Google Chrome locale tramite Playwright.
@@ -9,7 +45,7 @@ approfondita. Eseguita su Node 26.10.0 e Google Chrome locale tramite Playwright
 - `npm run format:check`: completato.
 - La verifica ha individuato un `animation-fill-mode: both` su `.tile-shell` che forzava `transform: none` e rompeva il posizionamento di react-grid-layout: l'entrance ora anima la tile interna senza fill.
 
-# Verifica — 16 ottobre 2026
+## Verifica — 16 ottobre 2026
 
 Prima milestone del desktop EDON, eseguita su Node 26.10.0 e Google Chrome locale tramite Playwright.
 

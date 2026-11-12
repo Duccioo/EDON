@@ -1,60 +1,76 @@
-# HTTP del desktop — milestone 1
+# Interfaccia HTTP
 
-Questa interfaccia serve il browser. Autenticazione con cookie `session`, HttpOnly e SameSite=Strict, durata sette giorni. Nessun token per agenti in questa fase. Risposte di errore JSON: `{ "error": "messaggio" }`.
+Il browser usa il cookie `session` (`HttpOnly`, `SameSite=Strict`, durata sette giorni). Gli agenti usano `Authorization: Bearer <token>` soltanto sui percorsi indicati. Errori JSON: `{ "error": "messaggio" }`; origini cross-site non consentite sulle scritture ricevono `403`.
 
-| Metodo | Percorso         | Comportamento                                                                   |
-| ------ | ---------------- | ------------------------------------------------------------------------------- |
-| GET    | `/api/auth`      | Restituisce `configured` e `authenticated`                                      |
-| POST   | `/api/setup`     | Imposta la prima password, solo se non configurata                              |
-| POST   | `/api/login`     | Verifica password e crea una sessione                                           |
-| POST   | `/api/logout`    | Invalida la sessione                                                            |
-| POST   | `/api/password`  | Cambia la password (`{current, password}`), autenticato, max 8 tentativi/minuto |
-| GET    | `/api/desktop`   | Desktop completo con `revision`                                                 |
-| PUT    | `/api/desktop`   | Valida e salva desktop e revisione                                              |
-| POST   | `/api/uploads`   | Un file multipart, massimo 10 MB                                                |
-| GET    | `/uploads/:name` | Restituisce il file a un utente autenticato                                     |
+## Sessione e desktop
 
-Login e setup accettano `{ "password": "…" }` e hanno un limite di tentativi. Le altre operazioni richiedono la sessione. Per esempio, dopo aver configurato la password nel browser:
+| Metodo     | Percorso                            | Comportamento                                                        |
+| ---------- | ----------------------------------- | -------------------------------------------------------------------- |
+| GET        | `/api/auth`                         | Stato `configured` e `authenticated`; pubblico                       |
+| POST       | `/api/setup`                        | Prima password, minimo 10 caratteri; pubblico finché non configurato |
+| POST       | `/api/login`                        | Login e cookie; massimo 8 tentativi/minuto                           |
+| POST       | `/api/logout`                       | Invalida la sessione                                                 |
+| POST       | `/api/password`                     | `{current,password}`; autenticato, massimo 8 tentativi/minuto        |
+| GET / PUT  | `/api/desktop`                      | Documento completo e salvataggio con controllo revisione             |
+| GET / POST | `/api/tokens`                       | Elenco e creazione token; solo sessione                              |
+| DELETE     | `/api/tokens/:id`                   | Revoca token; solo sessione                                          |
+| GET / PUT  | `/api/agent`                        | Configurazione Hermes; solo sessione                                 |
+| POST       | `/api/agent/test`, `/api/agent/ask` | Test connessione e richiesta Hermes; solo sessione                   |
+| GET        | `/api/weather?q=…`                  | Meteo Open-Meteo; solo sessione                                      |
+
+`PUT /api/desktop` richiede `settings`, `tiles`, `archive` e l’ultima `revision`. Una scrittura valida incrementa la revisione; `409` richiede una nuova lettura e non va sovrascritto automaticamente. Il modello e i limiti completi sono in `packages/shared/model.ts`.
+
+Colonne e righe restituite sono dinamiche (rispettivamente 2–12 e 2–128). Note/TODO arrivano a 3 colonne e tutte le righe configurate, file a 3×3, altri tipi a 2×2. L’archivio locale contiene massimo 1.000 note/TODO; con vault attivo l’archiviazione conserva invece il file e rimuove il pin. URL ammessi: HTTP, HTTPS e Obsidian; immagini remote: HTTPS.
+
+## Upload e file
+
+Entrambi gli endpoint richiedono sessione, multipart con un solo file e massimo 10 MB.
+
+| Metodo | Percorso         | Comportamento                                                                             |
+| ------ | ---------------- | ----------------------------------------------------------------------------------------- |
+| POST   | `/api/uploads`   | Solo PNG, JPEG, WebP o GIF riconosciuti dal contenuto; risponde `{url}`                   |
+| POST   | `/api/files`     | Qualsiasi file non vuoto; risponde `{url,name,kind}` con `kind` = `image`, `pdf` o `file` |
+| GET    | `/uploads/:name` | Download autenticato; formati non noti solo come attachment                               |
+
+Immagini e PDF vengono classificati dal contenuto, non dal MIME dichiarato. Gli altri formati mantengono un’estensione sicura e non vengono renderizzati. I token Bearer non hanno accesso a questi endpoint.
+
+## Obsidian
+
+| Metodo    | Percorso                         | Sessione               | Bearer        |
+| --------- | -------------------------------- | ---------------------- | ------------- |
+| GET / PUT | `/api/vault`                     | Stato/configurazione   | No            |
+| GET       | `/api/vault/notes?q=&folder=`    | Sì                     | Sì, read-only |
+| GET       | `/api/vault/note?path=`          | Sì                     | Sì, read-only |
+| PUT       | `/api/vault/note`                | Crea/aggiorna Markdown | No            |
+| DELETE    | `/api/vault/note?path=&version=` | Sposta nel cestino     | No            |
+
+Le note usano percorsi relativi `.md` sicuri. Gli aggiornamenti di note esistenti richiedono il campo `version` restituito dall’ultima lettura; anche l’eliminazione richiede lo stesso valore nel parametro `version`. Un cambiamento esterno produce `409` senza modificare il file. Le operazioni possono sovrascrivere, rinominare o spostare file: leggi [obsidian.md](obsidian.md) prima dell’uso.
+
+## API agenti e metriche
+
+I percorsi tile/layout seguenti accettano sessione oppure Bearer. Le metriche richiedono la sessione.
+
+| Metodo               | Percorso                 | Comportamento                                             |
+| -------------------- | ------------------------ | --------------------------------------------------------- |
+| GET / POST           | `/api/tiles`             | Elenco / creazione (`201`)                                |
+| GET / PATCH / DELETE | `/api/tiles/:id`         | Lettura / aggiornamento / eliminazione                    |
+| PUT                  | `/api/tiles/by-key/:key` | Upsert idempotente (`201` creazione, `200` aggiornamento) |
+| GET                  | `/api/tile-types`        | Tipi, campi e limiti                                      |
+| GET / PUT            | `/api/layout`            | Griglia dinamica / spostamento tile agenti                |
+| GET                  | `/api/performance`       | Metriche del server                                       |
+| GET                  | `/api/ai-limits`         | Riepilogo configurazione agente e token                   |
+
+Creazione/aggiornamento accettano `type`, `title`, `subtitle`, `url`, `w`, `h`, `expiresAt`, `externalKey`, `config` e `appearance`; campi sconosciuti danno `400`. `config` e `appearance` sono patch parziali. Le tile create da agenti hanno `origin: "agent"`; solo queste possono essere ridimensionate, spostate o eliminate dagli agenti.
+
+Le chiavi stabili usano lettere, numeri e `. _ : -` (massimo 120 caratteri). Cambiare tipo su una chiave esistente dà `409`. `expiresAt` è ISO 8601 o `null`; una scadenza passata elimina la tile alla lettura successiva.
 
 ```sh
 curl -c /tmp/edon-cookie -H 'Content-Type: application/json' \
   -d '{"password":"la-tua-password"}' http://127.0.0.1:3001/api/login
 curl -b /tmp/edon-cookie http://127.0.0.1:3001/api/desktop
+
+curl -H "Authorization: Bearer $EDON_TOKEN" \
+  http://127.0.0.1:3001/api/layout
 ```
 
-`PUT /api/desktop` richiede `{ settings, tiles, revision }`. La revisione deve essere quella restituita dall'ultima lettura; un salvataggio valido la incrementa. `409` segnala un conflitto e richiede una nuova lettura; non sovrascrivere automaticamente le modifiche dell'altra finestra. La struttura completa è definita in `packages/shared/model.ts`.
-
-I campi sono validati sul server, inclusi dimensioni, limiti, duplicati e sovrapposizioni. Note (`text`) e TODO (`data`) arrivano a 3 colonne e 128 righe, entro le dimensioni del desktop; i file (`file`) arrivano a 3×3; gli altri tipi a 2×2. Il documento desktop include `archive` (massimo 1.000 note/TODO), preservato da salvataggi e backup; gli ID devono essere unici anche tra desktop e archivio. URL di destinazione ammessi: HTTP, HTTPS e Obsidian. Immagini remote: HTTPS; quelle caricate vengono servite dal server. Errori di validazione: `400`, accesso mancante: `401`, origine non consentita: `403`, file oltre il limite: `413`.
-
-## API per agenti
-
-Gli agenti esterni (Hermes, Codex, script) usano `Authorization: Bearer <token>`. I token si creano in **Impostazioni globali → Agenti** (mostrati una sola volta, con scadenza e revoca) oppure si imposta `EDON_AGENT_TOKEN` nell'ambiente. Il token apre **solo** i percorsi qui sotto; non dà accesso a `/api/desktop`, `/api/tokens` né agli upload. Se Hermes gira su un'altra macchina, esponi EDON con HTTPS o VPN.
-
-| Metodo               | Percorso                 | Comportamento                                              |
-| -------------------- | ------------------------ | ---------------------------------------------------------- |
-| GET                  | `/api/tiles`             | `{ tiles }`                                                |
-| POST                 | `/api/tiles`             | Crea (201). `type` obbligatorio                            |
-| GET / PATCH / DELETE | `/api/tiles/:id`         | Legge, aggiorna, elimina                                   |
-| PUT                  | `/api/tiles/by-key/:key` | Upsert idempotente: 201 se crea, 200 se aggiorna           |
-| GET                  | `/api/tile-types`        | Tipi di tile, campi e aspetto                              |
-| GET                  | `/api/layout`            | Colonne (6), revisione, posizioni                          |
-| PUT                  | `/api/layout`            | `{ tiles: [{id,x,y}] }`: sposta solo tile create da agenti |
-
-Regole:
-
-- Le tile create da agenti hanno `origin: "agent"` e vengono messe nel primo spazio libero; le tile dell'utente non vengono mai spostate né ridimensionate. `409` se la griglia è piena.
-- Gli agenti possono aggiornare il contenuto e l'aspetto di qualsiasi tile, ma eliminare e spostare solo quelle `origin: "agent"` (`403` altrimenti).
-- Corpo di creazione/aggiornamento: `type`, `title`, `subtitle`, `url`, `w`, `h`, `expiresAt` (ISO 8601 o `null`), `externalKey`, `config` (anche parziale: `body`, `items`, `icon`, `image`, `timezone`, `children`) e `appearance` (anche parziale; `preset` applica prima il preset). Campi sconosciuti → `400`.
-- `GET /api/weather?q=<città>` (solo sessione): meteo attuale da Open-Meteo, in cache per 10 minuti. `POST /api/files` (solo sessione, max 10 MB) carica qualsiasi file e risponde `{url, name, kind}` con `kind` = `image`, `pdf` o `file`; tipo e estensione di immagini e PDF sono decisi dal contenuto, gli altri formati vengono serviti solo come download.
-- Cartelle (`type: "folder"`): `config.children` è la lista completa (max 24, senza annidamento) di mini-tile `{id, type, title, subtitle, url, config, appearance}`; `GET /api/tile-types` ne documenta la forma.
-- `expiresAt` nel passato: la tile viene rimossa alla lettura successiva. Chiave stabile: lettere, numeri e `. _ : -`, max 120 caratteri; cambiare `type` di una chiave esistente dà `409`.
-- Errori: `{ "error": "messaggio" }` con 400, 401, 403, 404 o 409.
-- Il browser rileva le modifiche degli agenti entro 5 secondi, se non ha salvataggi in sospeso.
-
-```sh
-curl -X PUT http://127.0.0.1:3001/api/tiles/by-key/daily-news \
-  -H "Authorization: Bearer $EDON_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"type":"data","title":"Notizie tech","config":{"body":"…"},"expiresAt":null}'
-```
-
-Per MCP (`POST /mcp`, stesso token) e per la configurazione di Hermes vedi [agenti](agents.md).
+Per MCP e Hermes vedi [agents.md](agents.md).

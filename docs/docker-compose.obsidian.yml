@@ -1,0 +1,8 @@
+services:
+  edon:
+    environment:
+      OBSIDIAN_VAULT_PATH: /vault
+    volumes:
+      - type: bind
+        source: ${OBSIDIAN_VAULT_HOST_PATH:?Set OBSIDIAN_VAULT_HOST_PATH to an existing vault directory}
+        target: /vault

@@ -1,17 +1,27 @@
-# Agenti: REST e MCP
+# Agenti: REST, MCP e Hermes
 
-EDON non contiene un LLM. Un agente esterno (Hermes, Codex, Claude, script) legge e scrive tile con **REST** (`docs/api.md`) o con **MCP**; entrambi usano lo stesso servizio (`apps/server/src/tiles.ts`), quindi regole e validazione sono identiche.
+EDON non contiene un LLM. Agenti esterni come Hermes, Codex o script usano REST ([api.md](api.md)) oppure MCP; entrambi passano dallo stesso servizio tile e dalla stessa validazione.
 
-## Collegamento
+## Token e ambiti
 
-1. In **Impostazioni globali → Agenti** crea un token (o imposta `EDON_AGENT_TOKEN` nello stack Docker). Il token autorizza solo l'API per le tile e `/mcp`.
-2. L'agente usa `Authorization: Bearer <token>`. L'agente può stare su un'altra macchina: raggiungi EDON con HTTPS (reverse proxy) o VPN, e imposta `HOST=0.0.0.0` / `COOKIE_SECURE=true` solo se necessario. Non esporre EDON in chiaro su Internet.
+Crea un token in **Impostazioni → Agenti e token** oppure imposta `EDON_AGENT_TOKEN`. Il valore viene mostrato una sola volta; i token creati dalla UI possono avere scadenza ed essere revocati. Invialo come:
 
-## Server MCP
+```http
+Authorization: Bearer edon_…
+```
 
-Endpoint: `POST /mcp` (Streamable HTTP, senza sessione). Strumenti: `list_tiles`, `create_tile`, `update_tile`, `upsert_tile`, `delete_tile`, `get_layout`, `list_tile_types`. Gli errori di validazione tornano come risultato `isError` con il motivo, così l'agente può correggersi.
+Il Bearer abilita soltanto API tile/layout, tipi, lettura vault e `/mcp`; non apre desktop completo, metriche, gestione token, configurazione, upload o download file. Il vault è **read-only** per gli agenti: gli endpoint diretti di scrittura/eliminazione e le impostazioni vault richiedono il cookie di sessione. MCP offre soltanto `list_vault_notes` e `read_vault_note`, non strumenti di scrittura vault.
 
-Configurazione generica (client che accettano `url` e `headers`):
+Per accesso remoto usa HTTPS o VPN; non esporre EDON in chiaro su Internet.
+
+## MCP
+
+Endpoint: `POST /mcp`, Streamable HTTP senza sessione persistente. Strumenti:
+
+- tile: `list_tiles`, `create_tile`, `update_tile`, `upsert_tile`, `delete_tile`, `get_layout`, `list_tile_types`;
+- vault read-only: `list_vault_notes`, `read_vault_note`.
+
+Gli errori di validazione vengono restituiti come risultato `isError`. `get_layout` restituisce le colonne e righe **configurate**, non un numero fisso.
 
 ```json
 {
@@ -26,7 +36,7 @@ Configurazione generica (client che accettano `url` e `headers`):
 
 ### Hermes
 
-In `~/.hermes/config.yaml` della macchina dove gira Hermes (sintassi dalla [documentazione MCP di Hermes](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp); `${VAR}` viene letto da `~/.hermes/.env`):
+Nella configurazione di Hermes (vedi la [documentazione MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)):
 
 ```yaml
 mcp_servers:
@@ -36,44 +46,28 @@ mcp_servers:
       Authorization: "Bearer ${EDON_TOKEN}"
 ```
 
-Poi puoi chiedere: «metti un tile con il meteo di Firenze» oppure «ogni mattina aggiorna il tile `daily-news` con le notizie di tecnologia» (con un task pianificato di Hermes che chiama `upsert_tile`). Se Hermes non supporta MCP HTTP, usa lo stesso token con `curl`/REST.
+Per abilitare anche il suo server OpenAI-compatible, configura `API_SERVER_ENABLED=true` e una `API_SERVER_KEY` lunga in `~/.hermes/.env`, quindi avvia `hermes gateway` (porta predefinita 8642).
 
-## Dal desktop a Hermes: il pulsante ✨
+In **Impostazioni → Agente AI** inserisci URL, chiave e modello; **Verifica connessione** controlla `/health`. `HERMES_URL`, `HERMES_API_KEY` e `HERMES_MODEL` hanno precedenza sulle impostazioni salvate. La chiave salvata dalla UI è in chiaro in `data/desktop.sqlite`.
 
-La barra in basso accetta richieste in linguaggio naturale («aggiungi un tile con l'ora di New York»). EDON le invia **dal server** (la chiave non arriva mai al browser) a Hermes con `POST {HERMES_URL}/v1/chat/completions` e `Authorization: Bearer <API_SERVER_KEY>`; Hermes agisce sul desktop con gli strumenti MCP e il browser mostra le nuove tile entro pochi secondi. La lente accanto al campo passa alla ricerca nel desktop.
+**Aggiungi tile → Crea con agenti AI** invia il prompt dal server a `POST {HERMES_URL}/v1/chat/completions`; la chiave Hermes non arriva al browser. La richiesta HTTP ha un timeout di **60 secondi**. Hermes deve avere EDON configurato come MCP e un token valido per applicare le modifiche.
 
-Su Hermes (macchina remota inclusa), in `~/.hermes/.env`:
+## Regole sulle tile
+
+- Le creazioni hanno `origin: "agent"` e usano il primo spazio libero; non spostano tile esistenti.
+- Gli agenti possono aggiornare contenuto/aspetto delle tile, ma ridimensionare, spostare ed eliminare soltanto quelle `origin: "agent"`.
+- Usa `upsert_tile` o `PUT /api/tiles/by-key/:key` con una chiave stabile per contenuti ricorrenti. `expiresAt` rimuove la tile alla scadenza.
+- Le cartelle contengono fino a 24 mini-tile in `config.children`, senza annidamento; `config.vaultPath` può puntare a una directory vault o `*`.
+- Note e TODO possono collegare `config.vaultPath`. Le API tile restano soggette alle regole di sincronizzazione del vault: tratta token e contenuti come sensibili e prova le automazioni su una copia.
+- Meteo: `config.location`; timer/scadenza: `config.startsAt` e `config.endsAt`; file: `config.file` deve essere un `/uploads/…` già caricato. Gli agenti non possono caricare file.
+- Tipi disponibili: `text`, `data`, `link`, `image`, `clock`, `folder`, `weather`, `progress`, `file`, `performance`, `ai_limits`, `radio`. `list_tile_types` è la fonte aggiornata per campi e limiti.
+- Le tile sono dichiarative: nessun JavaScript inviato da un agente viene eseguito.
+
+Esempio idempotente:
 
 ```sh
-API_SERVER_ENABLED=true
-API_SERVER_KEY=una-chiave-lunga
-# per raggiungerlo da un'altra macchina, vedi l'host del gateway nella documentazione di Hermes
+curl -X PUT http://127.0.0.1:3001/api/tiles/by-key/daily-news \
+  -H "Authorization: Bearer $EDON_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"data","title":"Notizie tech","config":{"body":"…"},"expiresAt":null}'
 ```
-
-poi `hermes gateway` (porta predefinita 8642). In EDON, **Impostazioni globali → Agente AI**: indirizzo (`http://host:8642`), chiave API e modello (`hermes-agent`); _Verifica connessione_ controlla `/health`. Nello stack Docker usa `HERMES_URL`, `HERMES_API_KEY` e `HERMES_MODEL`: se presenti prevalgono sulle impostazioni salvate. La chiave salvata dall'interfaccia sta in chiaro nel database `data/desktop.sqlite`, come il resto della configurazione.
-
-Perché Hermes possa creare le tile, deve avere EDON come server MCP (sezione sopra) con un token proprio. Le richieste lunghe (ricerca di notizie, più passaggi) possono impiegare fino a tre minuti prima del timeout.
-
-## Regole per gli agenti
-
-- Le tile create hanno `origin: "agent"`, sono piazzate nel primo spazio libero e non spostano mai quelle dell'utente.
-- Si può aggiornare il contenuto di ogni tile, ma eliminare e spostare solo le tile create da agenti.
-- Usa una **chiave stabile** (`upsert_tile`, `PUT /api/tiles/by-key/:key`) per contenuti ricorrenti: aggiorna la tile invece di duplicarla.
-- `expiresAt` rimuove la tile alla scadenza (es. riepilogo di una riunione per sette giorni).
-- Le **cartelle** (`type: "folder"`, max 24 elementi in `config.children`, senza annidamento) raggruppano mini-tile create con `createFolderChild`: utili per progetti («metti insieme note e link del progetto X»).
-- **Meteo** (`weather`): `config.location` è la città; il server interroga Open-Meteo (senza chiave) e mette in cache 10 minuti.
-- **Timer e scadenze** (`progress`): la barra si riempie da `config.startsAt` a `config.endsAt` (ISO 8601). Un timer ha `startsAt` = adesso.
-- **File** (`file`): `config.file` è un percorso `/uploads/…` già caricato dall’utente (trascinando un file sul desktop o dal catalogo); i PDF mostrano la prima pagina. Gli agenti non caricano file.
-- Nessun codice viene eseguito: le tile sono dati dichiarativi (`text`, `data`, `link`, `image`, `clock`, `folder`, `weather`, `progress`, `file`) con aspetto configurabile.
-
-## Esempi
-
-**Meteo** (`upsert_tile`): `key: "weather-firenze"`, `type: "data"`, `title: "Firenze · 21°"`, `config: { body: "Sereno. Domani 23°, nuvoloso.", image: "https://…/sole.png" }`, `appearance: { preset: "glass" }`.
-
-**Riunione**: `key: "meeting-2026-10-16"`, `type: "data"`, `config.items` con le azioni (`{id,text,done:false}`), `url: "obsidian://open?vault=…&file=…"`, `expiresAt` tra sette giorni.
-
-**Notizie**: `key: "daily-news"`, aggiornata ogni mattina; `config.body` con il riassunto.
-
-## Verso widget personalizzati (futuro)
-
-Il rendering delle tile è separato dai dati. Un sistema di widget scritti da agenti dovrebbe usare iframe in sandbox con permessi espliciti e un canale di messaggi ristretto; non è implementato e l'API non esegue mai JavaScript inviato dagli agenti.

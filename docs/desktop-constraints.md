@@ -1,4 +1,6 @@
-# Desktop completo e impostazioni visive
+# Desktop completo e impostazioni visive — storico
+
+> Verifica storica del 17 ottobre 2026; gli esiti non certificano la release corrente. Per il layout attuale vedi [desktop.md](desktop.md).
 
 Revisione del 17 ottobre 2026.
 
@@ -30,4 +32,4 @@ I desktop precedenti senza `maxTiles` ricevono almeno 24 posti, o il numero di t
 - Nel browser integrato: composizione a 1440×900 e 1280×720, anteprima live di distanza/angoli/colori, salvataggio del limite, raggiungimento della capacità e blocco della duplicazione, preset di colore nell’ispettore, focus nel dialog delle impostazioni.
 - Suite Playwright aggiornata per il nuovo layout; non eseguita integralmente.
 
-Schermate locali in `test-results/settings-review/`.
+Gli screenshot correnti del desktop e delle impostazioni sono in [`docs/screenshots`](screenshots/).

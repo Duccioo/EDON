@@ -1,4 +1,6 @@
-# Note e ridimensionamento — 23 ottobre 2026
+# Note e ridimensionamento — 23 ottobre 2026 (storico)
+
+> Documento storico: problemi, test ed esiti appartengono a questa milestone e non sostituiscono una nuova verifica della release.
 
 ## Problemi riprodotti
 

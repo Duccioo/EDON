@@ -1,4 +1,6 @@
-# Prima milestone
+# Prima milestone — documento storico
+
+> **Storico (ottobre 2026).** Questo documento conserva le decisioni iniziali e non descrive lo stato attuale: Markdown, API agenti, MCP, tipi aggiuntivi e integrazione Obsidian sono ora implementati. Per il comportamento corrente usa [desktop.md](desktop.md), [obsidian.md](obsidian.md), [api.md](api.md) e [agents.md](agents.md).
 
 ## Obiettivo
 

@@ -1,6 +1,16 @@
 # TODO
 
-## Verifica delle rifiniture — 23 ottobre 2026
+> Le sezioni datate e l’elenco cronologico sottostante sono **storici**: le spunte registrano richieste o interventi passati, non una certificazione della release corrente. Le verifiche aggiornate vanno registrate in [docs/verification.md](docs/verification.md) e la preparazione del rilascio segue [docs/release.md](docs/release.md).
+
+## Prossime attività
+
+- [ ] Misurare sfondi animati e micro-interazioni su hardware meno potente.
+- [ ] Rifinire selezione tra blocchi e continuazione automatica delle liste nell’editor.
+- [ ] Eseguire la checklist di release e provare il mount `/vault` su una copia con permessi non privilegiati.
+
+## Archivio storico
+
+### Verifica delle rifiniture — 23 ottobre 2026
 
 - [x] Note sul desktop in sola lettura, incluso il titolo; un clic apre il documento laterale. Aggiunta rapida soltanto nelle TODO.
 - [x] Modifica dei blocchi già scritti, rendering con Invio, modalità sorgente, salvataggio durante la digitazione e annulla/ripristina nell’editor delle note.
@@ -11,7 +21,6 @@
 Dettagli e verifiche: [rifiniture del 23 ottobre](docs/refinements-2026-10-23.md).
 
 ## Attività precedentemente segnate come completate
-
 
 - [x] Ancora vedo poche animazioni, tipo quando apro un tile o quando lo chiudo, oppure quando apro le impostazioni, oppure quando apro il menù di aggiunta tile.
   - [x] Cerca una libreria per animazioni e micro-interazioni sul web e reddit
@@ -25,9 +34,8 @@ Dettagli e verifiche: [rifiniture del 23 ottobre](docs/refinements-2026-10-23.md
 - [x] Gli sfondi animati sono troppo pesanti fanno laggare tutto!
 - [x] L'effetto 3d Parallasse sui tile è troppo evidente, ridurlo!
 
-
-
 ---
+
 - [ ] Tile calendario
 - [ ] Cliccando sul tile meteo si apre un popup con le previsioni del meteo per i prossimi giorni e con più informazioni.
 - [ ] Scrivere una documentazione approfondita.
@@ -40,6 +48,7 @@ Dettagli e verifiche: [rifiniture del 23 ottobre](docs/refinements-2026-10-23.md
 - [ ] Aggiungere la possibilità di fare più viste (Tipo vista lavoro, vista personale, ecc.) e poterle cambiare velocemente.
 
 ---
+
 - [x] Per aggiungere note o altro è sufficinete iniziare a scrivere con la tastiera, e poi il desktop capisce che voglio aggiungere una nota o un todo o altro, e mi fa scegliere cosa voglio aggiungere.
   - [x] Aggiunstare il bug che quando scrivo parecchio il desktop si rimpicciolisce in alto
 - [x] il lato esterno della pagina lo voglio che sia a filo della finestra mentre il lato interno voglio che sia resizable.

@@ -1,91 +1,184 @@
 # EDON
 
-Un desktop personale composto da tile, ispirato ai riferimenti in `docs/visual-references`. Questa prima milestone implementa il desktop interattivo e persistente. Obsidian e la cattura nel vault sono rimandati alla fase successiva; token per agenti, API REST, server MCP e collegamento con Hermes sono descritti in [agenti](docs/agents.md).
+**A private, local-first desktop made of tiles.** Notes, tasks, files, widgets, a Markdown vault and an agent API — all on your machine.
 
-## Avvio locale
+[![CI](https://github.com/Duccioo/EDON/actions/workflows/ci.yml/badge.svg)](https://github.com/Duccioo/EDON/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-252d20.svg)](LICENSE)
+[![Node.js 24+](https://img.shields.io/badge/node-%E2%89%A524-252d20.svg)](https://nodejs.org/)
 
-Richiede Node.js **24 o successivo** e npm.
+![EDON desktop](docs/screenshots/desktop.png)
+
+> **Status:** `0.1.0` — a complete, self-hosted preview. The application is usable and tested, but interfaces may still change before `1.0`.
+
+## Why EDON
+
+Most dashboards turn into another inbox. EDON is designed as a quiet personal canvas: a configurable grid, expressive tiles and no cloud account. Your data stays in local SQLite and in files you own.
+
+- **Local-first:** SQLite, uploads and an optional Obsidian vault on disk.
+- **Single-user by default:** password login, HTTP-only sessions, rate limits and a localhost binding.
+- **Composable:** notes, tasks, links, images, files, clocks, folders, weather, timers, system metrics, AI quota widgets and a radio player.
+- **Agent-ready:** scoped Bearer tokens, a REST API and a stateless MCP server.
+- **Obsidian-aware:** browse, search, pin, edit and archive Markdown notes with two-way file synchronization.
+- **Docker-friendly:** one container, one data volume, optional read/write vault mount.
+
+## Highlights
+
+- Dynamic grid from 2 to 12 columns and 2 to 128 rows. The fitted desktop starts at `900 × 600`; smaller screens switch to a scrollable layout and then a single column.
+- Edit mode with drag, resize, compact, duplicate and per-tile inspection.
+- Markdown notes and todos with inline editing, block/source modes, undo and live preview.
+- Quick capture: write Markdown, convert `- [ ]` lines to todos, turn a lone URL into a link, or attach images and GIFs.
+- Global appearance controls for spacing, shape, borders, opacity, glass and animated wallpapers.
+- Folders with up to 24 child tiles, including vault-backed folders.
+- Optional Obsidian vault integration with version checks, atomic writes, trash handling and symlink confinement.
+- External agents through `Authorization: Bearer …`, REST or `/mcp`. Vault access is read-only for agents.
+- JSON export/import of the desktop plus documented on-disk backup.
+
+## Quick start
+
+Requirements: **Node.js 24 or newer** and npm.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Apri http://127.0.0.1:5173. Al primo accesso scegli una password di almeno 10 caratteri. Il server ascolta solo su localhost. I font, le illustrazioni e lo sfondo predefiniti sono locali; nessun servizio cloud è necessario per il desktop.
+Open <http://127.0.0.1:5173> and create a password of at least 10 characters. The development server binds to localhost only.
 
-Per eseguire la versione compilata:
+For the production build:
 
 ```sh
 npm run build
 npm start
 ```
 
-Apri http://127.0.0.1:3001. `HOST`, `PORT`, `DATA_DIR` e `COOKIE_SECURE` sono variabili d'ambiente; `.env.example` ne mostra i valori. Per caricare un file `.env`, usa `node --env-file=.env --import tsx apps/server/src/index.ts` dopo la build.
+Open <http://127.0.0.1:3001>.
 
-## Il desktop
+To load an optional `.env` file without editing package scripts:
 
-- **Desktop completo**: su finestre desktop da 900×600 px, la griglia occupa tutto lo spazio tra intestazione e comandi: larghezza delle colonne e altezza delle righe si adattano separatamente. Tutte le tile restano visibili senza scorrere e le posizioni sono conservate. Su finestre più piccole resta disponibile la vista scorrevole.
-- **Griglia configurabile**: scegli separatamente colonne (orizzontali) e righe (verticali) in Impostazioni → Aspetto. La miniatura mostra anche le celle vuote. Una tile 2×2 occupa quattro celle. Se serve, il desktop tenta di ridisporre le tile; se non entrano, la modifica viene rifiutata senza rimuovere contenuti.
-- **Limite tile**: 24 per i nuovi desktop, modificabile in Impostazioni → Aspetto. Vale per aggiunte, duplicazioni e agenti; non conta il contenuto delle cartelle. Non si può impostare un limite inferiore alle tile già presenti.
-- **Cattura rapida**: una barra unica cresce mentre scrivi. Supporta Markdown; il pulsante **Todo** trasforma le righe `- [ ]` e `- [x]` in attività, conservando il resto della nota. ⌘/Ctrl + Invio salva e libera subito la barra. La graffetta, incolla e trascinamento aggiungono immagini/GIF. **+** apre Aggiungi tile, Modifica, Archivio e Impostazioni; in modifica compaiono **Compatta** e **Fine**.
-- **Aggiungi tile**: collegamenti (inclusi URI `obsidian://`), immagini/GIF, note Markdown, elenchi, orologi e **cartelle** (fino a 24 mini-tile organizzate in una vista dedicata, senza annidamento).
-- **Modifica** oppure **E**: seleziona una tile, trascinala e usa l'angolo inferiore destro per ridimensionarla. Le tile vicine restano ferme: in uno spazio occupato puoi scambiare due tile delle stesse dimensioni; gli altri spostamenti incompatibili vengono annullati.
-- L’ispettore offre tutte le combinazioni fino a **3 colonne e tutte le righe disponibili per note e TODO**, **2×2 per gli altri tipi**, con gli stessi limiti nel trascinamento e nelle API; include spostamento, duplicazione ed eliminazione con conferma.
-- Ogni tile ha colori, tipografia e immagini personalizzabili. Angoli, bordo, padding, opacità e vetro sono uniformi per il desktop e si regolano nelle **Impostazioni globali**. Preset: Minimal, Dot / Industrial, Soft Glass.
-- L'orologio è una tile ordinaria. Puoi aggiungerne più di uno e configurare fusi IANA come `Europe/Rome` o `Asia/Tokyo`.
-- Note e TODO hanno **Archivia** direttamente sulla tile e nella vista completa. **+ → Archivio** permette di leggerle e ripristinarle quando c’è spazio; l’archivio è incluso nel backup JSON.
-- Le cartelle si aprono con un clic: dentro si aggiungono link, note, liste, immagini e orologi; ogni elemento si modifica o rimuove, le spunte funzionano.
-- Le celle libere rimangono sempre visibili in modo leggero; in modifica la griglia è più evidente. Le tile non hanno crocette decorative.
-- Note e liste mostrano un’anteprima. Le note sul desktop sono in sola lettura: cliccando titolo o testo, oppure **Leggi nota**, si apre il documento laterale ridimensionabile. Qui titolo e contenuto sono modificabili direttamente: clic su un blocco per correggerlo, Invio per renderizzarlo e proseguire, Maiusc+Invio per un ritorno a capo nello stesso blocco. Liste, tabelle e codice mantengono l’editing multilinea. **Testo normale** espone il sorgente Markdown completo. Le modifiche vengono salvate durante la digitazione; ⌘/Ctrl+Z annulla e ⌘/Ctrl+Maiusc+Z ripristina. L’aggiunta rapida sul desktop è disponibile soltanto per le TODO. **Esc** chiude la vista.
-- Le tile elenco mostrano prima le attività da fare. La vista completa offre filtri Tutte / Da fare / Completate e aggiunta diretta. Nell’editor condiviso si modificano testo Markdown e righe `- [ ]` / `- [x]`; il pulsante Todo permette di cambiare tipo. ⌘/Ctrl + Invio salva note e liste.
-- **Impostazioni** (pagina a tutto schermo): Aspetto (anteprima live affiancata, miniatura del desktop e dettaglio di una tile, distanza 0–40 px con preset, limite tile, forma e bordi, otto colori pronti, pieghe astratte, tinta unita, gradiente o immagine caricata, nome del desktop), Agente AI, Agenti e token, Sicurezza (cambio password), Dati e backup (export/import JSON, ripristino), Integrazioni, Info.
-- Attendi **Tutto salvato** prima di chiudere. Gli errori rimangono visibili con possibilità di riprovare. Una seconda finestra con dati superati riceve un conflitto: ricarica prima di modificarla.
-- Su mobile la composizione si adatta a due colonne; si usano ispettore e pulsanti per modificare dimensioni e posizione. Il trascinamento è disponibile dai 690 px.
-
-I collegamenti aprono una nuova scheda. Gli URI di applicazioni richiedono che il sistema abbia un'app associata. Il collegamento Obsidian predefinito è solo una scorciatoia: non legge il vault.
-
-## Dati e backup
-
-`data/desktop.sqlite` contiene desktop, impostazioni, password con scrypt e sessioni con token memorizzati come hash. `data/uploads/` contiene immagini caricate, con nomi generati dal server. PNG, JPEG, WebP e GIF fino a 10 MB; SVG caricati non sono accettati. Gli asset SVG predefiniti sono codice locale del progetto.
-
-Per un backup semplice, arresta il server e copia l'intera directory `data/` (con eventuali file SQLite `-wal` e `-shm`). Ripristina la directory prima di riavviare. Dalle Impostazioni → Dati e backup puoi anche esportare/importare il desktop in JSON (le immagini caricate restano su disco e vanno copiate a parte). I file caricati rimangono sul disco anche se la tile viene eliminata: non è ancora presente una raccolta automatica dei file inutilizzati. La password si cambia da Impostazioni → Sicurezza.
+```sh
+node --env-file=.env --import tsx apps/server/src/index.ts
+```
 
 ## Docker
+
+Build and start from source:
 
 ```sh
 docker compose up --build -d
 ```
 
-Apri http://127.0.0.1:3001 e configura la password. Il volume `edon-data` mantiene database e immagini tra riavvii. Non usare `docker compose down -v` se vuoi conservare i dati.
+Open <http://127.0.0.1:3001>. The `edon-data` volume keeps the database and uploads. Do not run `docker compose down -v` unless you want to delete them.
 
-Il binding predefinito è localhost. Per accesso remoto usa un reverse proxy HTTPS o una VPN; configura la prima password prima di rendere il servizio raggiungibile. Dietro HTTPS imposta `COOKIE_SECURE=true` e inoltra correttamente Host e Origin. Non esporre la directory dei dati tramite il reverse proxy.
+Published releases are available from GitHub Container Registry:
 
-## Verifiche
+```sh
+docker pull ghcr.io/duccioo/edon:latest
+docker run --rm -p 127.0.0.1:3001:3001 -v edon-data:/app/data ghcr.io/duccioo/edon:latest
+```
+
+To mount an existing Obsidian vault:
+
+```sh
+OBSIDIAN_VAULT_HOST_PATH=/absolute/path/to/Vault \
+  docker compose -f docker-compose.yml -f docs/docker-compose.obsidian.yml up --build -d
+```
+
+The container runs as `node` (UID 1000) and needs read, create, rename and delete permissions on the mounted vault. Mount only the intended directory and keep an independent backup.
+
+For remote access, use HTTPS through a reverse proxy or a VPN. Set `COOKIE_SECURE=true` behind HTTPS and configure the first password before exposing the service. Never expose `data/` or the vault directory.
+
+## Configuration
+
+| Variable                  | Default     | Purpose                                                         |
+| ------------------------- | ----------- | --------------------------------------------------------------- |
+| `HOST`                    | `127.0.0.1` | HTTP bind address. Use `0.0.0.0` only inside a container/proxy. |
+| `PORT`                    | `3001`      | HTTP port.                                                      |
+| `DATA_DIR`                | `./data`    | SQLite database and uploaded files.                             |
+| `COOKIE_SECURE`           | `false`     | Set `true` when the browser connects over HTTPS.                |
+| `EDON_AGENT_TOKEN`        | empty       | Optional static Bearer token for agents.                        |
+| `HERMES_URL`              | empty       | OpenAI-compatible Hermes endpoint.                              |
+| `HERMES_API_KEY`          | empty       | Hermes API key; it stays server-side.                           |
+| `HERMES_MODEL`            | empty       | Hermes model name.                                              |
+| `OBSIDIAN_VAULT_PATH`     | empty       | Absolute path to the vault directory on the server.             |
+| `OBSIDIAN_FOLDER`         | empty       | Default folder for new notes.                                   |
+| `OBSIDIAN_ARCHIVE_FOLDER` | `.trash`    | Vault trash/archive folder.                                     |
+
+See [`.env.example`](.env.example) for a ready-to-copy template.
+
+## Obsidian
+
+Configure the vault in **Settings → Integrations → Obsidian Vault**, or through `OBSIDIAN_VAULT_PATH`. EDON can browse and search `.md` files, pin notes and folders to the desktop, and synchronize linked notes and todos.
+
+**Saving can rewrite, rename or trash Markdown files.** Use a copy of the vault for the first test and keep a separate backup. EDON refuses to overwrite notes it cannot represent losslessly, and it checks the file version before writing. See the [Obsidian guide](docs/obsidian.md) (Italian).
+
+## Agents and MCP
+
+Create a token in **Settings → Agents and tokens**, or set `EDON_AGENT_TOKEN`. The token grants access to tile/layout APIs and MCP. Vault reads are allowed; vault writes, deletions, telemetry, uploads and configuration require a browser session.
+
+```http
+Authorization: Bearer edon_…
+```
+
+- REST API: [`docs/api.md`](docs/api.md)
+- MCP tools and Hermes setup: [`docs/agents.md`](docs/agents.md)
+- MCP endpoint: `POST /mcp`
+
+## Data and backups
+
+- `data/desktop.sqlite` contains the desktop, settings, password hash, sessions and hashed tokens.
+- `data/uploads/` contains every uploaded file. The JSON export includes desktop metadata, not file bytes.
+- A Vault is outside `data/` and requires a separate backup.
+
+For a complete backup, stop EDON and copy the whole `data/` directory, including SQLite `-wal` and `-shm` files if present, then back up the vault separately. Restore before restarting. Unreferenced uploads are not garbage-collected automatically.
+
+## Security
+
+EDON is intended for a trusted single user or a small private deployment. It is not a multi-tenant platform.
+
+- Use HTTPS or a VPN for remote access.
+- Keep `data/`, vaults, backups and `.env` files private.
+- The Hermes key saved through the UI is stored in plain text inside SQLite.
+- Bearer tokens are scoped and stored as hashes; password changes revoke other browser sessions.
+- Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
+
+## Development
 
 ```sh
 npm run build
 npm test
+npm run format:check
+npx playwright install chromium   # once, unless CHROME_PATH is set
 npm run test:e2e
 ```
 
-I test del backend usano directory temporanee e verificano autenticazione, validazione, upload, conflitti e riavvio. I test browser usano un server isolato sulla porta 4173 e Google Chrome installato in `/Applications/Google Chrome.app`; configura `CHROME_PATH` su altre macchine. Per Chromium di Playwright, passa il percorso dell'eseguibile in `CHROME_PATH`. Le schermate sono in `test-results/`.
+The backend suite uses temporary directories. The browser suite starts an isolated server on port `4173`. CI runs on Node 24 with build, unit/integration tests, formatting, Playwright and a Docker image build.
 
-```sh
-npm run format:check
+Repository layout:
+
+```text
+apps/server     Fastify server, SQLite persistence, auth, vault and MCP
+apps/web        React desktop and tile renderers
+packages/shared Zod models, layout and capture logic
+tests           Node and Playwright test suites
+docs            Product, API, Obsidian and release documentation (Italian)
 ```
 
-## Struttura e prossime fasi
+## Documentation
 
-- `packages/shared`: modelli TypeScript/Zod, preset, composizione iniziale e posizionamento senza sovrapposizioni.
-- `apps/server`: persistenza SQLite, autenticazione, upload e interfaccia HTTP.
-- `apps/web`: canvas, renderer dei contenuti, ispettore e salvataggio serializzato.
+The product documentation is currently maintained in Italian:
 
-[Guida al desktop](docs/desktop.md) · [Esiti della verifica](docs/verification.md) · [Interfaccia HTTP](docs/api.md) · [Decisioni e limiti](docs/implementation.md) · [Skill installate](docs/skills.md)
+- [Desktop guide](docs/desktop.md)
+- [Obsidian integration](docs/obsidian.md)
+- [HTTP API](docs/api.md)
+- [Agents and MCP](docs/agents.md)
+- [Verification record](docs/verification.md)
+- [GitHub release guide](docs/github-release.md)
+- [Release policy](docs/release.md)
 
-Per gli agenti esterni esistono token Bearer, un CRUD per tile con chiavi stabili e scadenze, e un server MCP (`/mcp`), tutti sullo stesso servizio. **Aggiungi tile → Crea con agenti AI** chiede a Hermes di agire. Configurazione: `EDON_AGENT_TOKEN`, `HERMES_URL`, `HERMES_API_KEY`, `HERMES_MODEL` (vedi `.env.example`) oppure Impostazioni globali.
+## Contributing
 
-Nessun JavaScript personalizzato viene eseguito. Note e TODO supportano Markdown, inclusi immagini/GIF, collegamenti, codice, tabelle e checklist. L’HTML incorporato viene ignorato e gli URL non sicuri vengono bloccati.
+Small, focused changes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), run the verification commands and never test destructive vault features against real notes. By contributing you agree that your work is released under the MIT License.
 
-## Asset e licenze
+## License
 
-Space Grotesk e Doto sono distribuiti localmente dai pacchetti Fontsource con licenza SIL OFL (vedi `node_modules/@fontsource-variable/*/LICENSE`). Le illustrazioni SVG in `apps/web/public/art` sono originali del progetto. Le immagini di riferimento in `docs/visual-references` sono usate come ispirazione e non sono distribuite nel frontend.
+Code and original assets are released under the [MIT License](LICENSE). Fonts and third-party dependencies retain their own licenses; asset provenance and exclusions are documented in [NOTICE](NOTICE).
