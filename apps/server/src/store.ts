@@ -136,12 +136,17 @@ export class Store {
       )
     );
   }
-  changePassword(password: string) {
+  changePassword(password: string, currentSession?: string) {
     const salt = randomBytes(16).toString("hex");
     const result = this.db
       .prepare("UPDATE account SET salt=?,hash=? WHERE id=1")
       .run(salt, scryptSync(password, salt, 64).toString("hex"));
     if (!result.changes) throw new Error("Nessun account configurato.");
+    if (currentSession)
+      this.db
+        .prepare("DELETE FROM sessions WHERE hash<>?")
+        .run(this.digest(currentSession));
+    else this.db.prepare("DELETE FROM sessions").run();
   }
   session() {
     const token = randomBytes(32).toString("hex");

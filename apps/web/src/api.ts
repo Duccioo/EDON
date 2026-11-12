@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Desktop, Snapshot } from "../../../packages/shared/model";
+
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "RequestError";
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -10,7 +21,10 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const result = await response.json();
   if (!response.ok)
-    throw new Error(result.error ?? "Connessione non riuscita. Riprova.");
+    throw new RequestError(
+      result.error ?? "Connessione non riuscita. Riprova.",
+      response.status,
+    );
   return result as T;
 }
 export async function upload(file: File) {
@@ -38,6 +52,7 @@ export function useDesktop() {
   const [desktop, setDesktop] = useState<Snapshot | null>(null);
   const [status, setStatus] = useState("Caricamento…");
   const [error, setError] = useState("");
+  const [saveConflict, setSaveConflict] = useState(false);
   const revision = useRef(0);
   const latest = useRef<Snapshot | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -88,10 +103,19 @@ export function useDesktop() {
         });
         revision.current = result.revision;
         setError("");
+        setSaveConflict(false);
         if (latest.current === value) setStatus("Tutto salvato");
       } catch (e) {
-        setError((e as Error).message);
-        setStatus("Modifiche non salvate");
+        const conflict = e instanceof RequestError && e.status === 409;
+        setSaveConflict(conflict);
+        setError(
+          conflict
+            ? "Il desktop è cambiato altrove. Ricarica per vedere la versione più recente; le modifiche locali non salvate andranno perse."
+            : (e as Error).message,
+        );
+        setStatus(
+          conflict ? "Conflitto di salvataggio" : "Modifiche non salvate",
+        );
       }
     });
   }, []);
@@ -121,6 +145,7 @@ export function useDesktop() {
     update,
     status,
     error,
+    saveConflict,
     retry: () => latest.current && save(latest.current),
     refresh: pull,
   };

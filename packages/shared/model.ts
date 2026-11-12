@@ -175,6 +175,12 @@ const baseConfigSchema = z.object({
   file: fileUrl.default(""),
   /** Relative path in the Obsidian vault (.md file for notes/todos, folder or '*' for folder tiles). */
   vaultPath: vaultPathSchema.default(""),
+  /** SHA-256 of the vault content last read or written by EDON. */
+  vaultVersion: z
+    .string()
+    .regex(/^[\da-f]{64}$/)
+    .or(z.literal(""))
+    .default(""),
   /** A progress tile fills between these two instants (timer or deadline). */
   startsAt: instant.default(""),
   endsAt: instant.default(""),
@@ -274,6 +280,34 @@ export const desktopSchema = z
         message: `Il limite deve essere almeno ${tiles.length}: nessuna tile verrà rimossa.`,
       });
     const ids = new Set<string>();
+    const externalKeys = new Set<string>();
+    const checkIdentity = (tile: (typeof tiles)[number]) => {
+      if (ids.has(tile.id))
+        ctx.addIssue({
+          code: "custom",
+          message: "Ogni tile e contenuto di cartella deve avere un ID unico.",
+        });
+      ids.add(tile.id);
+      if (tile.externalKey) {
+        if (externalKeys.has(tile.externalKey))
+          ctx.addIssue({
+            code: "custom",
+            message: "Ogni chiave stabile deve essere unica.",
+          });
+        externalKeys.add(tile.externalKey);
+      }
+      if (tile.type === "folder") {
+        for (const child of tile.config.children ?? []) {
+          if (ids.has(child.id))
+            ctx.addIssue({
+              code: "custom",
+              message:
+                "Ogni tile e contenuto di cartella deve avere un ID unico.",
+            });
+          ids.add(child.id);
+        }
+      }
+    };
     for (const tile of [...tiles, ...archive]) {
       if (!tileSizeAllowed(tile))
         ctx.addIssue({
@@ -282,18 +316,17 @@ export const desktopSchema = z
         });
     }
     for (const tile of archive) {
-      if (ids.has(tile.id) || !["text", "data"].includes(tile.type))
+      if (!["text", "data"].includes(tile.type))
         ctx.addIssue({
           code: "custom",
           message:
             "Archivio non valido: sono ammesse note e TODO con identificativi unici.",
         });
-      ids.add(tile.id);
+      checkIdentity(tile);
     }
     for (let i = 0; i < tiles.length; i++) {
       const tile = tiles[i];
       if (
-        ids.has(tile.id) ||
         tile.x + tile.w > (settings.columns ?? 6) ||
         tile.y + tile.h > (settings.rows ?? 128) ||
         tiles.slice(0, i).some((other) => overlaps(tile, other))
@@ -303,7 +336,7 @@ export const desktopSchema = z
           message:
             "Il layout contiene tile duplicate, sovrapposte o fuori griglia.",
         });
-      ids.add(tile.id);
+      checkIdentity(tile);
     }
   })
   .transform(({ settings, tiles, archive }) => ({
@@ -369,6 +402,7 @@ export function createTile(
       location: "",
       file: "",
       vaultPath: "",
+      vaultVersion: "",
       startsAt: "",
       endsAt: "",
       pausedAt: "",
@@ -376,7 +410,11 @@ export function createTile(
       items:
         type === "ai_limits"
           ? [
-              { id: "claude", text: "Claude Max | 65% | Reset 5h", done: false },
+              {
+                id: "claude",
+                text: "Claude Max | 65% | Reset 5h",
+                done: false,
+              },
               {
                 id: "chatgpt",
                 text: "ChatGPT Plus | 40% | Reset 3h",
@@ -437,6 +475,7 @@ export function createFolderChild(
       location: "",
       file: "",
       vaultPath: "",
+      vaultVersion: "",
       startsAt: "",
       endsAt: "",
       pausedAt: "",

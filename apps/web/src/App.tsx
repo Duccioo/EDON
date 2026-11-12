@@ -203,7 +203,8 @@ function appendToCaptureInput(text: string) {
 }
 
 function DesktopApp({ onLogout }: { onLogout: () => void }) {
-  const { desktop, update, status, error, retry, refresh } = useDesktop();
+  const { desktop, update, status, error, saveConflict, retry, refresh } =
+    useDesktop();
   const ink = useDesktopInk(desktop?.settings);
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -382,6 +383,8 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         setEditing(false);
         return;
       }
+      if (target.closest("button,a,summary,[role='button'],[role='link']"))
+        return;
       // Single-key "e" toggles grid edit mode; if followed immediately by another character,
       // treat it as typing a word starting with "e" into the capture bar!
       if (e.key === "e" || e.key === "E") {
@@ -529,39 +532,6 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     setEditingNote(false);
     setVaultOpen({ folder, path });
   };
-  const toggleFolderItem = (
-    folderId: string,
-    childId: string,
-    itemId: string,
-  ) =>
-    update((old) => ({
-      ...old,
-      tiles: old.tiles.map((item) =>
-        item.id === folderId
-          ? {
-              ...item,
-              updatedAt: new Date().toISOString(),
-              config: {
-                ...item.config,
-                children: (item.config.children ?? []).map((c) =>
-                  c.id === childId
-                    ? {
-                        ...c,
-                        updatedAt: new Date().toISOString(),
-                        config: {
-                          ...c.config,
-                          items: c.config.items.map((i) =>
-                            i.id === itemId ? { ...i, done: !i.done } : i,
-                          ),
-                        },
-                      }
-                    : c,
-                ),
-              },
-            }
-          : item,
-      ),
-    }));
   const moveIntoFolder = (folderId: string, tileId: string) => {
     const folder = desktop.tiles.find((t) => t.id === folderId);
     const moved = desktop.tiles.find((t) => t.id === tileId);
@@ -631,15 +601,21 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
     }
   };
   const setTile = (changed: Tile) => {
-    const tiles = arrangeTile(desktop.tiles, changed, desktop.settings);
-    if (!tiles) {
+    let rejected = false;
+    update((old) => {
+      const tiles = arrangeTile(old.tiles, changed, old.settings);
+      if (!tiles) {
+        rejected = true;
+        return old;
+      }
+      return { ...old, tiles };
+    });
+    if (rejected) {
       setNotice(
         "Spazio occupato: usa una zona libera oppure scambia tile delle stesse dimensioni.",
       );
       setGridEpoch((n) => n + 1);
-      return;
     }
-    update((old) => ({ ...old, tiles }));
   };
   const patchConfig = (id: string, patch: Partial<Tile["config"]>) =>
     update((old) => ({
@@ -747,6 +723,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       next.config.body = note.body;
       next.config.items = note.items;
       next.config.vaultPath = note.path;
+      next.config.vaultVersion = note.version;
       update((old) => ({ ...old, tiles: [...old.tiles, next] }));
       setNotice(`“${note.title}” fissata sul desktop.`);
     } catch (e) {
@@ -1210,6 +1187,11 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
   const atCapacity =
     desktop.tiles.length >= s.maxTiles ||
     !findTileSpace(desktop.tiles, { w: 1, h: 1 }, s);
+  const deletingChildren = deleting?.config.children ?? [];
+  const deletingVaultLinks = [
+    ...(deleting ? [deleting] : []),
+    ...deletingChildren,
+  ].filter((item) => item.config.vaultPath).length;
   const wallpaper: CSSProperties = {
     backgroundColor: s.background,
     backgroundImage:
@@ -1252,7 +1234,11 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           <span> / {s.maxTiles} tile</span>
         </button>
         <div className="header-end">
-          <span className="visually-hidden" role="status">
+          <span
+            className={`save-state ${status === "Tutto salvato" ? "is-saved" : "is-pending"}`}
+            role="status"
+          >
+            <i aria-hidden="true" />
             {status}
           </span>
           <button
@@ -1700,10 +1686,16 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
           settings={s}
           desktop={desktop}
           onChange={(settings) => {
-            const tiles = resizeGrid(desktop.tiles, settings);
-            if (!tiles) return false;
-            update((old) => ({ ...old, settings, tiles }));
-            return true;
+            let accepted = true;
+            update((old) => {
+              const tiles = resizeGrid(old.tiles, settings);
+              if (!tiles) {
+                accepted = false;
+                return old;
+              }
+              return { ...old, settings, tiles };
+            });
+            return accepted;
           }}
           onImport={importDesktop}
           onClose={closeDialog}
@@ -1869,6 +1861,7 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         >
           {editingNote && expanded.type === "data" ? (
             <CaptureComposer
+              key={expanded.id}
               initialKind={expanded.type}
               initial={{ title: expanded.title, body: captureSource(expanded) }}
               onSave={(draft) => {
@@ -1899,8 +1892,12 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
             />
           ) : (
             <article
-              className={`tile expanded-tile tile-${expanded.type} font-${expanded.appearance.font}`}
-              style={tileStyle(expanded, s)}
+              className={`tile expanded-tile ${expanded.type === "text" || expanded.type === "data" ? "expanded-paper" : ""} tile-${expanded.type} font-${expanded.appearance.font}`}
+              style={tileStyle(
+                expanded,
+                s,
+                expanded.type === "text" || expanded.type === "data",
+              )}
               onDoubleClick={(e) => {
                 if (
                   !isArchived &&
@@ -2031,10 +2028,22 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
         <Modal title="Eliminare questa tile?" onClose={closeDelete}>
           <p>
             “{deleting.title}” verrà rimossa dal desktop
-            {deleting.config.vaultPath
-              ? " e il file .md verrà spostato nel cestino del Vault."
-              : "."}
+            {deletingChildren.length > 0
+              ? ` insieme a ${deletingChildren.length} ${deletingChildren.length === 1 ? "elemento figlio" : "elementi figli"}`
+              : ""}
+            .
           </p>
+          {deletingVaultLinks > 0 && (
+            <p className="error-text">
+              Attenzione:{" "}
+              {deletingVaultLinks === 1
+                ? "il file .md collegato"
+                : `i ${deletingVaultLinks} file .md collegati`}{" "}
+              al Vault Obsidian verrà{deletingVaultLinks > 1 ? "anno" : ""}{" "}
+              spostat
+              {deletingVaultLinks > 1 ? "i" : "o"} nel cestino del Vault.
+            </p>
+          )}
           <div className="dialog-actions">
             <button onClick={closeDelete}>Annulla</button>
             <button
@@ -2056,8 +2065,15 @@ function DesktopApp({ onLogout }: { onLogout: () => void }) {
       {error && (
         <div className="save-error" role="alert">
           <p>{error}</p>
-          <button onClick={retry}>Riprova salvataggio</button>
-          <button onClick={() => location.reload()}>Ricarica desktop</button>
+          {!saveConflict && (
+            <button onClick={retry}>Riprova salvataggio</button>
+          )}
+          <button
+            className={saveConflict ? "primary" : undefined}
+            onClick={() => location.reload()}
+          >
+            Ricarica desktop
+          </button>
         </div>
       )}
       {notice && (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { request } from "./api";
 
@@ -12,6 +12,13 @@ export function AgentCreator({
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   return (
     <form
       className="agent-creator"
@@ -25,11 +32,11 @@ export function AgentCreator({
             method: "POST",
             body: JSON.stringify({ prompt: prompt.trim() }),
           });
-          onDone(reply);
+          if (mounted.current) onDone(reply);
         } catch (e) {
-          setError((e as Error).message);
+          if (mounted.current) setError((e as Error).message);
         } finally {
-          setBusy(false);
+          if (mounted.current) setBusy(false);
         }
       }}
     >

@@ -174,17 +174,23 @@ test("create a link and upload a persistent image", async ({ page }) => {
 test("dragging, resizing, keyboard editing, wallpaper and deletion", async ({
   page,
 }) => {
+  const initial = await (await page.request.get("/api/desktop")).json();
+  const original = createTile("clock", initial.tiles, { w: 1, h: 1 });
+  original.title = "Orologio di prova";
+  expect(
+    (
+      await page.request.put("/api/desktop", {
+        data: { ...initial, tiles: [...initial.tiles, original] },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
   await page
     .getByRole("textbox", { name: "Appunta qualcosa", exact: true })
     .press("Escape");
   await page.keyboard.press("e");
-  const tile = page
-    .getByTestId("tile-clock")
-    .filter({ hasText: "Orologio di prova" });
+  const tile = page.locator(`#tile-${original.id}`);
   const before = await (await page.request.get("/api/desktop")).json();
-  const original = before.tiles.find(
-    (t: { title: string }) => t.title === "Orologio di prova",
-  );
   const box = (await tile.boundingBox())!;
   const destination = (await page
     .locator(".grid-guides span")
@@ -229,16 +235,14 @@ test("dragging, resizing, keyboard editing, wallpaper and deletion", async ({
     .getByRole("textbox", { name: "Appunta qualcosa", exact: true })
     .press("Escape");
   await page.keyboard.press("e");
-  await page
+  await tile
     .getByRole("button", { name: "Modifica Orologio di prova", exact: true })
     .click();
   await page.getByRole("button", { name: "Elimina", exact: true }).click();
   await page.getByRole("button", { name: "Elimina tile", exact: true }).click();
   await expect(page.getByRole("status").first()).toHaveText("Tutto salvato");
   await page.reload();
-  await expect(
-    page.getByText("Orologio di prova", { exact: true }),
-  ).toHaveCount(0);
+  await expect(page.locator(`#tile-${original.id}`)).toHaveCount(0);
 });
 
 test("quick Markdown notes expand with complete content and persist", async ({
@@ -1335,13 +1339,16 @@ test("tile content adapts to narrow boxes and changing window sizes", async ({
           ),
       )
       .toEqual([]);
-    const folderBounds = await page.locator(".tile-folder").boundingBox();
-    const folderAction = await page
-      .locator(".tile-folder .tile-expand")
-      .boundingBox();
-    expect(folderAction!.y + folderAction!.height).toBeLessThanOrEqual(
-      folderBounds!.y + folderBounds!.height + 1,
-    );
+    const folderAction = page.locator(".tile-folder .tile-expand");
+    if (await folderAction.isVisible()) {
+      const folderBounds = await page.locator(".tile-folder").boundingBox();
+      const actionBounds = await folderAction.boundingBox();
+      expect(actionBounds!.y + actionBounds!.height).toBeLessThanOrEqual(
+        folderBounds!.y + folderBounds!.height + 1,
+      );
+    } else {
+      await expect(folderAction).toBeHidden();
+    }
     for (const selector of [".perf-tile", ".ai-limits-tile", ".radio-tile"]) {
       await expect
         .poll(() =>

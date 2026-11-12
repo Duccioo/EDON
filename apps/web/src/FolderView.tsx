@@ -73,21 +73,25 @@ function ChildEditor({
   const [error, setError] = useState("");
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    const originalItems = child.config.items;
+    let itemIndex = 0;
     const parsed = tileSchema.shape.config.omit({ children: true }).safeParse({
+      ...child.config,
       body,
-      icon: child.config.icon,
-      image: child.config.image,
       timezone,
       items: items
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean)
         .slice(0, 30)
-        .map((line) => ({
-          id: crypto.randomUUID(),
-          done: /^\[x\] /i.test(line),
-          text: line.replace(/^\[x\] /i, "").slice(0, 300),
-        })),
+        .map((line) => {
+          const original = originalItems[itemIndex++];
+          return {
+            id: original?.id ?? crypto.randomUUID(),
+            done: /^\[x\] /i.test(line),
+            text: line.replace(/^\[x\] /i, "").slice(0, 300),
+          };
+        }),
     });
     if (title.trim().length > 120) {
       setError("Il titolo è troppo lungo (max 120).");

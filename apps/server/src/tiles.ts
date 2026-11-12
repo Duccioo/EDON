@@ -78,19 +78,27 @@ export const tileTypeDocs = [
   {
     type: "text",
     description:
-      "Nota di testo. Il contenuto è in config.body (max 10000). Se il vault di Obsidian è attivo, config.vaultPath collega la tile a un file .md del vault.",
-    fields: ["title", "subtitle", "config.body", "config.vaultPath", "url"],
+      "Nota di testo. Il contenuto è in config.body (max 10000). Se il vault di Obsidian è attivo, config.vaultPath collega la tile a un file .md del vault; per sovrascrivere una nota esistente passa anche config.vaultVersion restituito da read_vault_note.",
+    fields: [
+      "title",
+      "subtitle",
+      "config.body",
+      "config.vaultPath",
+      "config.vaultVersion",
+      "url",
+    ],
     sizes: "larghezza 1–3, altezza 1–128 (entro le righe del desktop)",
   },
   {
     type: "data",
     description:
-      "Tile di dati: testo in config.body ed elenco di voci spuntabili in config.items (max 30, ognuna {id,text,done}). Sincronizzata con config.vaultPath nel vault di Obsidian se attivo.",
+      "Tile di dati: testo in config.body ed elenco di voci spuntabili in config.items (max 30, ognuna {id,text,done}). Sincronizzata con config.vaultPath nel vault di Obsidian se attivo; per sovrascrivere una nota esistente passa anche config.vaultVersion restituito da read_vault_note.",
     fields: [
       "title",
       "subtitle",
       "config.body",
       "config.items",
+      "config.vaultVersion",
       "config.vaultPath",
       "config.icon",
       "config.image",
@@ -278,6 +286,11 @@ export class TileService {
   }
   saveDesktop(next: Desktop, expectedRevision?: number): Snapshot {
     const previous = this.store.get();
+    if (
+      expectedRevision !== undefined &&
+      expectedRevision !== previous.revision
+    )
+      throw new Error("CONFLICT");
     this.vault?.syncToDisk(previous, next);
     return this.store.save(next, expectedRevision ?? previous.revision);
   }
@@ -432,7 +445,9 @@ export class TileService {
     tile.externalKey = input.externalKey ?? null;
     if (
       tile.externalKey &&
-      desktop.tiles.some((t) => t.externalKey === tile.externalKey)
+      [...desktop.tiles, ...desktop.archive].some(
+        (t) => t.externalKey === tile.externalKey,
+      )
     )
       throw new TileError(409, "Esiste già una tile con questa chiave.");
     const { w: _w, h: _h, externalKey: _k, type: _t, ...rest } = input;
@@ -446,7 +461,7 @@ export class TileService {
     const tile = desktop.tiles[index];
     if (
       input.externalKey &&
-      desktop.tiles.some(
+      [...desktop.tiles, ...desktop.archive].some(
         (t) => t.id !== id && t.externalKey === input.externalKey,
       )
     )

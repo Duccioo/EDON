@@ -1,7 +1,27 @@
 {
   "name": "edon-desktop",
   "version": "0.1.0",
+  "description": "A private, local-first desktop made of tiles, with Markdown notes, todos, Obsidian sync and an agent-ready API.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Duccioo/EDON.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Duccioo/EDON/issues"
+  },
+  "homepage": "https://github.com/Duccioo/EDON#readme",
+  "keywords": [
+    "desktop",
+    "dashboard",
+    "local-first",
+    "markdown",
+    "obsidian",
+    "mcp",
+    "self-hosted",
+    "tiles"
+  ],
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -12,8 +32,8 @@
     "start": "node --import tsx apps/server/src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
-    "format": "prettier --write apps packages tests playwright.config.ts package.json tsconfig.json",
-    "format:check": "prettier --check apps packages tests playwright.config.ts package.json tsconfig.json"
+    "format": "prettier --write apps packages tests docs .github README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md playwright.config.ts package.json tsconfig.json",
+    "format:check": "prettier --check apps packages tests docs .github README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md playwright.config.ts package.json tsconfig.json"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -32,7 +52,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tsx": "^4.20.0",
-    "zod": "^3.25.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

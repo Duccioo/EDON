@@ -97,7 +97,7 @@ export function mcpServer(tiles: TileService, vault?: VaultService) {
     "get_layout",
     {
       description:
-        "Griglia a 6 colonne con posizione e dimensione di ogni tile; serve a capire lo spazio occupato.",
+        "Griglia configurabile con posizione e dimensione di ogni tile; serve a capire lo spazio occupato.",
     },
     run(() => tiles.layout()),
   );

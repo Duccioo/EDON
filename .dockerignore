@@ -1,5 +1,6 @@
 node_modules
 .git
+.github
 .agents
 data
 test-results
@@ -7,3 +8,5 @@ playwright-report
 dist
 docs
 .env
+.env.*
+!.env.example

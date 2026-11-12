@@ -202,8 +202,68 @@ input[type="file"] {
 .header-end {
   margin-left: auto;
   display: flex;
-  gap: 15px;
+  gap: 4px;
   align-items: center;
+}
+.header-end .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  color: color-mix(in srgb, var(--desktop-ink, #1c201e) 66%, transparent);
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+.header-end .icon-button:hover {
+  color: var(--desktop-ink, #1c201e);
+  background: color-mix(in srgb, var(--desktop-ink, #1c201e) 7%, transparent);
+}
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 10px;
+  padding: 6px 10px;
+  border-radius: 99px;
+  font-size: 10px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--desktop-ink, #1c201e) 72%, transparent);
+  background: color-mix(in srgb, #f7f8f0 42%, transparent);
+  backdrop-filter: blur(12px);
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
+}
+.save-state i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.save-state.is-saved i {
+  color: #8fa51f;
+  box-shadow: 0 0 0 3px #8fa51f1c;
+}
+.save-state.is-pending {
+  color: #78653c;
+}
+.save-state.is-pending i {
+  background: #b68b32;
+  animation: save-pulse 1.4s ease-in-out infinite;
+}
+@keyframes save-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-state.is-pending i {
+    animation: none;
+  }
 }
 .desktop-main {
   width: 100%;
@@ -2137,6 +2197,53 @@ button:active:not(:disabled) {
   padding-top: 0;
   max-width: 62ch;
 }
+.expanded-paper {
+  box-shadow:
+    inset 4px 0 0 var(--tile-accent, #c4e847),
+    inset 0 0 0 1px #dedbd0 !important;
+}
+.expanded-paper .note-meta {
+  color: #5e6658;
+}
+.expanded-paper .text-headline,
+.content-text .expanded-paper .text-headline {
+  color: #1c201e;
+  letter-spacing: -1.8px;
+}
+.expanded-paper .note-document {
+  margin-top: 26px;
+}
+.expanded-paper .note-editor-toolbar {
+  margin-bottom: 22px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #dedbd0;
+  color: #62695d;
+}
+.expanded-paper .note-editor-toolbar > span {
+  opacity: 1;
+}
+.expanded-paper .note-mode-toggle {
+  border-color: #d2d2c4;
+  background: #f0eee5;
+}
+.expanded-paper .note-mode-toggle:hover {
+  background: #e7e4d8;
+}
+.expanded-paper .inline-note-line:focus,
+.expanded-paper .inline-note-plain:focus {
+  background: #ece9de;
+}
+.content-data .expanded-paper .check-item {
+  border-bottom-color: #e2dfd5;
+}
+.content-text .expanded-actions,
+.content-data .expanded-actions {
+  border-top: 1px solid #e2dfd5;
+  background: #f7f5ed;
+}
+.expanded-paper ~ .expanded-actions {
+  border-top-color: #dedbd0;
+}
 .content-data .expanded-tile .tile-top h2 {
   font-size: 30px;
 }
@@ -3002,16 +3109,28 @@ dialog.settings-page::backdrop {
   width: min(860px, calc(100% - 420px));
 }
 
-/* Quiet placeholders remain visible only in unoccupied cells. */
+/* Empty cells are drafting marks, never another row of tiles. */
+.grid-guides {
+  opacity: 0.55;
+}
 .grid-guides span {
-  border: 1px solid
-    color-mix(in srgb, var(--desktop-ink, #283323) 14%, transparent);
-  background: color-mix(in srgb, var(--desktop-ink, #fff) 5%, transparent);
+  border: 1px dashed
+    color-mix(in srgb, var(--desktop-ink, #283323) 8%, transparent);
+  background: transparent;
+  transform: scale(0.985);
+  transition:
+    opacity 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+.editing .grid-guides {
+  opacity: 1;
 }
 .editing .grid-guides span {
   border: 1.5px dashed
-    color-mix(in srgb, var(--desktop-ink, #283323) 26%, transparent);
-  background: color-mix(in srgb, var(--desktop-ink, #fff) 8%, transparent);
+    color-mix(in srgb, var(--desktop-ink, #283323) 24%, transparent);
+  background: color-mix(in srgb, var(--desktop-ink, #fff) 5%, transparent);
+  transform: none;
 }
 
 .markdown-content {
@@ -4222,12 +4341,27 @@ dialog.settings-page::backdrop {
   }
 }
 
-/* ---------- Fix capture-tools & central + button overlap when side workspace/editor is open ---------- */
+/* One quiet command surface: add, compose and attach belong to the same object. */
 .capture-tools {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 2px;
+  width: min(480px, calc(100% - 32px));
+  padding: 5px;
+  background: #f7f8f0ed;
+  border: 1px solid #ffffffb8;
+  border-radius: 22px;
+  box-shadow:
+    0 12px 36px #26301a24,
+    0 2px 8px #26301a0f,
+    inset 0 0 0 1px #ffffff55;
+  backdrop-filter: blur(24px);
+  pointer-events: auto;
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.capture-tools:has(.capture-bar.has-content) {
+  width: min(760px, calc(100% - 32px));
 }
 .capture-tools .tool-actions {
   position: relative;
@@ -4235,17 +4369,57 @@ dialog.settings-page::backdrop {
   bottom: auto;
   flex-shrink: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+}
+.capture-tools .tool-actions button {
+  height: 40px;
+  min-width: 40px;
+  padding: 9px;
+  border-radius: 15px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: #394132;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+.capture-tools .tool-actions button:hover {
+  background: #e9ebdf;
+  transform: translateY(-1px);
+}
+.capture-tools .tool-actions .tool-active {
+  background: #252d20;
+  color: #f4f7e9;
 }
 .capture-tools .capture-bar {
-  flex: 0 1 320px;
-  width: min(320px, calc(100vw - 140px));
+  flex: 0 1 auto;
+  width: min(310px, calc(100vw - 150px));
   min-width: 170px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.capture-tools .capture-bar:focus-within {
+  box-shadow: inset 0 0 0 1px #7f8c6f33;
 }
 .capture-tools .capture-bar.has-content {
   flex: 1 1 auto;
   width: auto;
+}
+@media (max-width: 600px) {
+  .capture-tools,
+  .capture-tools:has(.capture-bar.has-content) {
+    width: calc(100% - 24px);
+  }
+  .capture-tools .capture-bar {
+    width: auto;
+  }
 }
 .side-workspace {
   z-index: 45;
@@ -5103,16 +5277,24 @@ dialog.settings-page::backdrop {
   background: color-mix(in srgb, currentColor 20%, transparent);
 }
 .inline-title-input {
+  display: block;
   width: 100%;
   background: transparent;
   border: 0;
-  border-bottom: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  border-bottom: 1px dashed color-mix(in srgb, currentColor 22%, transparent);
   border-radius: 0;
   color: inherit;
   font: inherit;
-  padding: 0 0 2px;
+  line-height: 0.99;
+  padding: 0 0 4px;
   margin: 0;
   outline: none;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+}
+.inline-title-input:focus {
+  border-bottom-color: color-mix(in srgb, currentColor 65%, transparent);
 }
 .inline-note-surface {
   display: flex;
@@ -5278,6 +5460,19 @@ dialog.settings-page::backdrop {
     left: calc(var(--side-width, min(720px, 52vw)) + 16px);
     right: 24px;
     width: min(620px, calc(100vw - var(--side-width, min(720px, 52vw)) - 48px));
+  }
+}
+
+@media (max-width: 899px), (max-height: 599px) {
+  .side-workspace,
+  .side-workspace.side-wide {
+    inset: 0;
+    width: 100vw !important;
+    max-width: none;
+    border-radius: 0;
+  }
+  .side-resize-handle {
+    display: none;
   }
 }
 
@@ -5524,6 +5719,9 @@ dialog.settings-page::backdrop {
 @container tile (height < 160px) {
   .folder-preview,
   .folder-bottom {
+    display: none;
+  }
+  .tile-folder .tile-content-actions {
     display: none;
   }
   .tile-render + .tile-expand {

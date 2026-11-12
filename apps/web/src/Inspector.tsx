@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -16,7 +16,7 @@ import {
   type Appearance,
   type Tile,
 } from "../../../packages/shared/model";
-import { upload, uploadFile } from "./api";
+import { request, upload, uploadFile } from "./api";
 import { ColorPalette } from "./ColorPalette";
 /** An ISO instant as the value of a datetime-local input (device time zone). */
 const toLocalInput = (iso: string) => {
@@ -53,8 +53,14 @@ export function Inspector({
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const patch = (value: Partial<Tile>) => {
-    const next = { ...tile, ...value, updatedAt: new Date().toISOString() };
+  const tileRef = useRef(tile);
+  tileRef.current = tile;
+  const patch = (value: Partial<Tile>, base = tileRef.current) => {
+    const next = {
+      ...base,
+      ...value,
+      updatedAt: new Date().toISOString(),
+    };
     const parsed = tileSchema.safeParse(next);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
@@ -67,20 +73,28 @@ export function Inspector({
   const appearance = (value: Partial<Appearance>) =>
     patch({
       appearance: {
-        ...tile.appearance,
+        ...tileRef.current.appearance,
         ...value,
         ...(value.background ? { color: readableInk(value.background) } : {}),
       },
     });
   async function replaceFile(file?: File) {
     if (!file) return;
+    const initiatingTile = tileRef.current;
     setBusy(true);
     try {
       const stored = await uploadFile(file);
-      patch({
-        config: { ...tile.config, file: stored.url },
-        title: tile.title === "Nuovo file" ? stored.name : tile.title,
-      });
+      const base =
+        tileRef.current.id === initiatingTile.id
+          ? tileRef.current
+          : initiatingTile;
+      patch(
+        {
+          config: { ...base.config, file: stored.url },
+          title: base.title === "Nuovo file" ? stored.name : base.title,
+        },
+        base,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -88,14 +102,60 @@ export function Inspector({
     }
   }
   const setConfig = (value: Partial<Tile["config"]>) =>
-    patch({ config: { ...tile.config, ...value } });
+    patch({ config: { ...tileRef.current.config, ...value } });
+  async function linkVaultNote(path: string) {
+    const initiatingTile = tileRef.current;
+    if (!path) {
+      setConfig({ vaultPath: "", vaultVersion: "" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const note = await request<{
+        path: string;
+        title: string;
+        body: string;
+        items: Tile["config"]["items"];
+        version: string;
+      }>(`/api/vault/note?path=${encodeURIComponent(path)}`);
+      if (tileRef.current.id !== initiatingTile.id) return;
+      patch({
+        title: note.title,
+        config: {
+          ...tileRef.current.config,
+          body: note.body,
+          items: note.items,
+          vaultPath: note.path,
+          vaultVersion: note.version,
+        },
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function fileChange(file?: File, background = false) {
     if (!file) return;
+    const initiatingTile = tileRef.current;
     setBusy(true);
     try {
       const url = await upload(file);
-      if (background) appearance({ image: url });
-      else patch({ config: { ...tile.config, image: url } });
+      const base =
+        tileRef.current.id === initiatingTile.id
+          ? tileRef.current
+          : initiatingTile;
+      if (background) {
+        patch(
+          {
+            appearance: {
+              ...base.appearance,
+              image: url,
+            },
+          },
+          base,
+        );
+      } else patch({ config: { ...base.config, image: url } }, base);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -238,7 +298,7 @@ export function Inspector({
               defaultValue={tile.config.vaultPath}
               key={`${tile.id}-vault-note`}
               placeholder="es. Note/Idea.md (automatico se il vault è attivo)"
-              onBlur={(e) => setConfig({ vaultPath: e.target.value.trim() })}
+              onBlur={(e) => void linkVaultNote(e.target.value.trim())}
             />
           </label>
         )}
@@ -290,9 +350,7 @@ export function Inspector({
               Quote AI (Nome | % | Reset)
               <textarea
                 rows={4}
-                defaultValue={tile.config.items
-                  .map((i) => i.text)
-                  .join("\n")}
+                defaultValue={tile.config.items.map((i) => i.text).join("\n")}
                 key={`${tile.id}-${tile.config.items.map((i) => i.text).join("|")}`}
                 placeholder="Claude Max | 65% | Reset 5h"
                 onBlur={(e) =>

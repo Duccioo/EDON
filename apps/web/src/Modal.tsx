@@ -128,7 +128,20 @@ export function SideWorkspace({
   const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   const [resizing, setResizing] = useState(false);
+  const [compact, setCompact] = useState(() =>
+    typeof window === "undefined"
+      ? false
+      : !matchMedia("(min-width: 900px) and (min-height: 600px)").matches,
+  );
   closeRef.current = onClose;
+
+  useEffect(() => {
+    const media = matchMedia("(min-width: 900px) and (min-height: 600px)");
+    const update = () => setCompact(!media.matches);
+    media.addEventListener("change", update);
+    update();
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     ref.current
@@ -161,7 +174,7 @@ export function SideWorkspace({
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
-      style={width ? { width: `${width}px` } : undefined}
+      style={!compact && width ? { width: `${width}px` } : undefined}
       className={`side-workspace side-${side} ${wide ? "side-wide" : ""} ${resizing ? "is-resizing" : ""} ${className}`}
     >
       <div
@@ -177,14 +190,10 @@ export function SideWorkspace({
             width ?? ref.current?.getBoundingClientRect().width ?? 560;
           if (e.key === "ArrowLeft") {
             e.preventDefault();
-            onWidthChange(
-              clampWidth(current + (side === "right" ? 24 : -24)),
-            );
+            onWidthChange(clampWidth(current + (side === "right" ? 24 : -24)));
           } else if (e.key === "ArrowRight") {
             e.preventDefault();
-            onWidthChange(
-              clampWidth(current + (side === "right" ? -24 : 24)),
-            );
+            onWidthChange(clampWidth(current + (side === "right" ? -24 : 24)));
           }
         }}
         onPointerDown={(e) => {
@@ -194,9 +203,7 @@ export function SideWorkspace({
           setResizing(true);
           const move = (ev: PointerEvent) => {
             const raw =
-              side === "right"
-                ? window.innerWidth - ev.clientX
-                : ev.clientX;
+              side === "right" ? window.innerWidth - ev.clientX : ev.clientX;
             onWidthChange(clampWidth(raw));
           };
           const up = () => {

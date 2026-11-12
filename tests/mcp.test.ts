@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -8,9 +8,12 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { buildApp } from "../apps/server/src/app";
 
 test("MCP tools use the same tile service as the REST API", async () => {
+  const vaultDir = await mkdtemp(join(tmpdir(), "edon-mcp-vault-"));
+  await writeFile(join(vaultDir, "MCP.md"), "# MCP\n\nVault read\n");
   const app = await buildApp({
     dataDir: await mkdtemp(join(tmpdir(), "edon-mcp-")),
     agentToken: "token-mcp",
+    vault: { path: vaultDir },
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const url = new URL(
@@ -70,6 +73,20 @@ test("MCP tools use the same tile service as the REST API", async () => {
       await client.callTool({ name: "get_layout", arguments: {} }),
     );
     assert.ok(layout.tiles.some((t: { id: string }) => t.id === a.tile.id));
+    const vaultList = text(
+      await client.callTool({ name: "list_vault_notes", arguments: {} }),
+    );
+    assert.ok(
+      vaultList.notes.some((note: { path: string }) => note.path === "MCP.md"),
+    );
+    const vaultNote = text(
+      await client.callTool({
+        name: "read_vault_note",
+        arguments: { path: "MCP.md" },
+      }),
+    );
+    assert.equal(vaultNote.body, "Vault read");
+    assert.match(vaultNote.version, /^[\da-f]{64}$/);
     const del = await client.callTool({
       name: "delete_tile",
       arguments: { id: a.tile.id },

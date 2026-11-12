@@ -173,6 +173,10 @@ function DataPanel({
         onNotice(`Backup non valido: ${parsed.error.issues[0].message}`);
         return;
       }
+      const confirmed = window.confirm(
+        "Importare questo backup sostituirà tutte le tile e le cartelle attuali, inclusi i loro elementi figli. I file collegati nel Vault Obsidian non sono contenuti nel backup: i collegamenti attuali andranno persi e i file .md collegati possono essere spostati nel cestino del Vault. Continuare?",
+      );
+      if (!confirmed) return;
       onImport(parsed.data);
     } catch (e) {
       onNotice(`Backup non valido: ${(e as Error).message}`);
@@ -232,7 +236,10 @@ function DataPanel({
       ) : (
         <div className="settings-row">
           <p className="hint">
-            Sostituire tutte le tile con quelle di esempio?
+            Sostituire tutte le tile con quelle di esempio? Verranno eliminati
+            anche tutti gli elementi figli delle cartelle e i collegamenti ai
+            file del Vault Obsidian. I file .md collegati possono essere
+            spostati nel cestino del Vault.
           </p>
           <button onClick={() => setConfirmReset(false)}>Annulla</button>
           <button

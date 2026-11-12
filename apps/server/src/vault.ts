@@ -3,14 +3,25 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  desktopSchema,
   safeVaultPath,
   type Desktop,
   type FolderChild,
@@ -67,10 +78,33 @@ export type VaultNoteSummary = {
   doneCount: number;
 };
 
+type ScannedVaultNote = VaultNoteSummary & { searchText: string };
+
 export type VaultNoteDetail = VaultNoteSummary & {
   body: string;
   items: Tile["config"]["items"];
   obsidianUrl: string;
+  /** SHA-256 of the exact Markdown bytes decoded as UTF-8. */
+  version: string;
+};
+
+const vaultVersion = (raw: string) =>
+  createHash("sha256").update(raw, "utf8").digest("hex");
+
+const matchesLinkedNote = (tile: Tile | FolderChild, note: VaultNoteDetail) =>
+  tile.config.vaultVersion === note.version &&
+  tile.title === note.title &&
+  tile.config.body === note.body &&
+  tile.config.items.length === note.items.length &&
+  tile.config.items.every(
+    (item, index) =>
+      item.text === note.items[index].text &&
+      item.done === note.items[index].done,
+  );
+
+const inside = (root: string, target: string) => {
+  const rel = relative(root, target);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 };
 
 function splitFrontmatter(raw: string): {
@@ -189,10 +223,47 @@ export function obsidianUri(vaultName: string, relPath: string): string {
 }
 
 export class VaultService {
+  private readCache = new Map<
+    string,
+    { mtimeMs: number; size: number; raw: string }
+  >();
+
   constructor(
     private store: Store,
     private env: VaultEnv = {},
   ) {}
+
+  private assertConfined(root: string, target: string) {
+    let existing = target;
+    while (!existsSync(existing) && existing !== root)
+      existing = dirname(existing);
+    try {
+      const realRoot = realpathSync(root);
+      const realExisting = realpathSync(existing);
+      if (!inside(realRoot, realExisting)) throw new Error("outside");
+      if (existsSync(target) && !inside(realRoot, realpathSync(target)))
+        throw new Error("outside");
+    } catch {
+      throw new TileError(
+        400,
+        "Il percorso attraversa un collegamento fuori dal vault.",
+      );
+    }
+  }
+
+  private readCached(full: string) {
+    const stat = statSync(full);
+    const cached = this.readCache.get(full);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size)
+      return { raw: cached.raw, stat };
+    const raw = readFileSync(full, "utf8");
+    this.readCache.set(full, { mtimeMs: stat.mtimeMs, size: stat.size, raw });
+    return { raw, stat };
+  }
+
+  private invalidate(...paths: string[]) {
+    for (const path of paths) this.readCache.delete(path);
+  }
 
   private resolved() {
     const saved = this.store.getSetting("vault");
@@ -276,16 +347,17 @@ export class VaultService {
     const withExt = /\.md$/i.test(normalized) ? normalized : `${normalized}.md`;
     const full = resolve(root, withExt);
     const rel = relative(root, full);
-    if (rel.startsWith("..") || rel.includes("\\"))
+    if (rel.startsWith("..") || rel.includes("\\") || isAbsolute(rel))
       throw new TileError(400, "Percorso fuori dal vault non consentito.");
+    this.assertConfined(root, full);
     return full;
   }
 
   private scanVault(
     root: string,
     archiveFolder: string,
-  ): { notes: VaultNoteSummary[]; folders: string[] } {
-    const notes: VaultNoteSummary[] = [];
+  ): { notes: ScannedVaultNote[]; folders: string[] } {
+    const notes: ScannedVaultNote[] = [];
     const folders = new Set<string>();
     const archiveNorm = archiveFolder.replace(/\\/g, "/");
 
@@ -306,8 +378,7 @@ export class VaultService {
           walk(full);
         } else if (entry.isFile() && /\.md$/i.test(entry.name)) {
           try {
-            const raw = readFileSync(full, "utf8");
-            const stat = statSync(full);
+            const { raw, stat } = this.readCached(full);
             const parsed = parseVaultMarkdown(raw, rel);
             const folder = dirname(rel) === "." ? "" : dirname(rel);
             const plain = parsed.body
@@ -330,6 +401,7 @@ export class VaultService {
               kind: parsed.items.length > 0 ? "data" : "text",
               taskCount: parsed.items.length,
               doneCount: parsed.items.filter((i) => i.done).length,
+              searchText: raw.toLowerCase(),
             });
           } catch {
             // Ignore unreadable files
@@ -373,7 +445,8 @@ export class VaultService {
         return (
           n.title.toLowerCase().includes(q) ||
           n.path.toLowerCase().includes(q) ||
-          n.excerpt.toLowerCase().includes(q)
+          n.excerpt.toLowerCase().includes(q) ||
+          n.searchText.includes(q)
         );
       }
       return true;
@@ -382,7 +455,7 @@ export class VaultService {
       vaultName: basename(c.path),
       defaultFolder: c.folder,
       folders,
-      notes: filtered,
+      notes: filtered.map(({ searchText: _searchText, ...note }) => note),
     };
   }
 
@@ -412,7 +485,81 @@ export class VaultService {
       body: parsed.body,
       items: parsed.items,
       obsidianUrl: obsidianUri(basename(root), canonicalRel),
+      version: vaultVersion(raw),
     };
+  }
+
+  private prepareExisting(
+    full: string,
+    relPath: string,
+    items: Tile["config"]["items"],
+    expectedVersion: string | undefined,
+    textTile = false,
+  ) {
+    const raw = readFileSync(full, "utf8");
+    if (!expectedVersion)
+      throw new TileError(
+        409,
+        "Versione della nota richiesta: rileggi la nota prima di salvarla.",
+      );
+    if (vaultVersion(raw) !== expectedVersion)
+      throw new TileError(
+        409,
+        "La nota è cambiata sul disco. Ricaricala prima di salvare.",
+      );
+    const existing = parseVaultMarkdown(raw, relPath, items);
+    let body = existing.body;
+    if (textTile && existing.items.length > 0) {
+      const { content } = splitFrontmatter(raw);
+      const lines = content.replace(/\r\n/g, "\n").split("\n");
+      let start = 0;
+      while (start < lines.length && !lines[start].trim()) start++;
+      const heading =
+        start < lines.length ? /^#\s+(.+)$/.exec(lines[start].trim()) : null;
+      body = lines
+        .slice(heading ? start + 1 : start)
+        .join("\n")
+        .trim()
+        .slice(0, 10000);
+    }
+    const canonical = formatVaultMarkdown({
+      title: existing.title,
+      body,
+      items: textTile ? [] : existing.items,
+      frontmatter: existing.frontmatter,
+      includeHeading: existing.hasHeading,
+    });
+    if (canonical !== raw)
+      throw new TileError(
+        409,
+        "La nota ha contenuti o una struttura non modificabili senza perdite; EDON non la sovrascrive.",
+      );
+    return {
+      frontmatter: existing.frontmatter,
+      includeHeading: existing.hasHeading,
+    };
+  }
+
+  private atomicWrite(full: string, raw: string) {
+    const { path: root } = this.resolved();
+    mkdirSync(dirname(full), { recursive: true });
+    this.assertConfined(root, full);
+    const temp = join(
+      dirname(full),
+      `.${basename(full)}.edon-${randomUUID()}.tmp`,
+    );
+    try {
+      writeFileSync(temp, raw, { encoding: "utf8", flag: "wx" });
+      renameSync(temp, full);
+      this.invalidate(full);
+    } catch (error) {
+      try {
+        unlinkSync(temp);
+      } catch {
+        // The temp file was already renamed or was never created.
+      }
+      throw error;
+    }
   }
 
   writeNote(input: {
@@ -421,6 +568,7 @@ export class VaultService {
     title: string;
     body: string;
     items?: Tile["config"]["items"];
+    version?: string;
   }): VaultNoteDetail {
     const c = this.resolved();
     if (!this.isConfigured())
@@ -437,13 +585,14 @@ export class VaultService {
       const full = this.resolveSafe(relPath);
       relPath = relative(c.path, full).replace(/\\/g, "/");
       if (existsSync(full)) {
-        const existing = parseVaultMarkdown(
-          readFileSync(full, "utf8"),
+        const existing = this.prepareExisting(
+          full,
           relPath,
           items,
+          input.version,
         );
         frontmatter = existing.frontmatter;
-        includeHeading = existing.hasHeading;
+        includeHeading = existing.includeHeading;
       }
     } else {
       const targetFolder = cleanSubfolder(input.folder ?? c.folder);
@@ -451,7 +600,6 @@ export class VaultService {
     }
 
     const full = this.resolveSafe(relPath);
-    mkdirSync(dirname(full), { recursive: true });
     const stem = basename(relPath, ".md");
     const shouldIncludeHeading =
       includeHeading ||
@@ -459,7 +607,7 @@ export class VaultService {
         sanitizeFileName(input.title) !== stem &&
         input.title.trim() !== stem);
 
-    writeFileSync(
+    this.atomicWrite(
       full,
       formatVaultMarkdown({
         title: input.title,
@@ -468,31 +616,40 @@ export class VaultService {
         frontmatter,
         includeHeading: shouldIncludeHeading,
       }),
-      "utf8",
     );
     return this.readNote(relPath);
   }
 
-  trashNote(relPath: string): { archivedTo: string } {
+  trashNote(relPath: string, expectedVersion?: string): { archivedTo: string } {
     const full = this.resolveSafe(relPath);
     const c = this.resolved();
     if (!existsSync(full)) return { archivedTo: "" };
+    const raw = readFileSync(full, "utf8");
+    if (!expectedVersion || vaultVersion(raw) !== expectedVersion)
+      throw new TileError(
+        409,
+        "La nota è cambiata sul disco. Ricaricala prima di eliminarla.",
+      );
     const canonicalRel = relative(c.path, full).replace(/\\/g, "/");
     const trashDir = resolve(c.path, c.archiveFolder);
     const relToRoot = relative(c.path, trashDir);
-    if (relToRoot.startsWith(".."))
+    if (relToRoot.startsWith("..") || isAbsolute(relToRoot))
       throw new TileError(400, "Cartella cestino fuori dal vault.");
+    this.assertConfined(c.path, trashDir);
     const relSubdir =
       dirname(canonicalRel) === "." ? "" : dirname(canonicalRel);
     const targetDir = relSubdir ? join(trashDir, relSubdir) : trashDir;
     mkdirSync(targetDir, { recursive: true });
+    this.assertConfined(c.path, targetDir);
     const base = basename(full, ".md");
     let dest = join(targetDir, `${base}.md`);
     let counter = 2;
     while (existsSync(dest)) {
       dest = join(targetDir, `${base} ${counter++}.md`);
     }
+    this.assertConfined(c.path, dest);
     renameSync(full, dest);
+    this.invalidate(full, dest);
     return { archivedTo: relative(c.path, dest).replace(/\\/g, "/") };
   }
 
@@ -526,7 +683,12 @@ export class VaultService {
       }
       if (!existsSync(full)) return;
       try {
-        const raw = readFileSync(full, "utf8");
+        const { raw } = this.readCached(full);
+        const version = vaultVersion(raw);
+        if (tile.config.vaultVersion !== version) {
+          tile.config.vaultVersion = version;
+          changed = true;
+        }
         const parsed = parseVaultMarkdown(raw, relPath, tile.config.items);
         if (tile.type === "text" && parsed.items.length > 0) {
           // For a plain text note that has checkboxes in Obsidian, keep them in body if it's a text tile
@@ -585,6 +747,7 @@ export class VaultService {
   /** Syncs desktop mutations (new notes, edited notes, deleted notes) to the Obsidian vault on disk. */
   syncToDisk(previous: Desktop, next: Desktop): void {
     if (!this.isConfigured()) return;
+    desktopSchema.parse(next);
     const c = this.resolved();
 
     const collect = (d: Desktop) => {
@@ -607,6 +770,70 @@ export class VaultService {
     const archivedVaultPaths = new Set(
       next.archive.map((t) => t.config.vaultPath).filter(Boolean),
     );
+    const remainingPaths = new Set(
+      [...nextMap.values()].map((t) => t.config.vaultPath).filter(Boolean),
+    );
+
+    // Validate every existing-file change before the first filesystem side effect.
+    // A later conflict must not leave a partially applied desktop save.
+    for (const [id, tile] of nextMap.entries()) {
+      const prev = prevMap.get(id);
+      const relPath = tile.config.vaultPath;
+      if (!relPath || relPath === "*") continue;
+      const full = this.resolveSafe(relPath);
+      if (!existsSync(full)) continue;
+      const switchedPath = !prev || prev.config.vaultPath !== relPath;
+      const hasCustomContent =
+        tile.config.body.trim().length > 0 || tile.config.items.length > 0;
+      if (
+        switchedPath &&
+        (!hasCustomContent || matchesLinkedNote(tile, this.readNote(relPath)))
+      )
+        continue;
+      const willRename =
+        !!prev &&
+        prev.config.vaultPath === relPath &&
+        prev.title !== tile.title;
+      const contentChanged =
+        !prev ||
+        prev.title !== tile.title ||
+        prev.config.body !== tile.config.body ||
+        JSON.stringify(prev.config.items) !== JSON.stringify(tile.config.items);
+      if (!willRename && !contentChanged) continue;
+      const expectedVersion = switchedPath
+        ? tile.config.vaultVersion
+        : (prev?.config.vaultVersion ?? tile.config.vaultVersion);
+      this.prepareExisting(
+        full,
+        relPath,
+        tile.config.items,
+        expectedVersion,
+        tile.type === "text",
+      );
+    }
+    for (const [id, prevTile] of prevMap.entries()) {
+      const path = prevTile.config.vaultPath;
+      if (
+        path &&
+        path !== "*" &&
+        !nextMap.has(id) &&
+        !archivedIds.has(id) &&
+        !archivedVaultPaths.has(path) &&
+        !remainingPaths.has(path) &&
+        existsSync(this.resolveSafe(path))
+      ) {
+        const full = this.resolveSafe(path);
+        const raw = readFileSync(full, "utf8");
+        if (
+          !prevTile.config.vaultVersion ||
+          vaultVersion(raw) !== prevTile.config.vaultVersion
+        )
+          throw new TileError(
+            409,
+            "La nota è cambiata sul disco. Ricarica il desktop prima di eliminarla.",
+          );
+      }
+    }
 
     // 1. Sync active tiles and folder children
     for (const [id, tile] of nextMap.entries()) {
@@ -627,12 +854,13 @@ export class VaultService {
         // Tile was just linked to an existing Vault file: load its content if the tile has default/empty content
         const hasCustomContent =
           tile.config.body.trim().length > 0 || tile.config.items.length > 0;
-        if (!hasCustomContent) {
-          const detail = this.readNote(relPath);
+        const detail = this.readNote(relPath);
+        if (!hasCustomContent || matchesLinkedNote(tile, detail)) {
           tile.title = detail.title;
           tile.config.body = detail.body;
           tile.config.items = detail.items;
           tile.config.vaultPath = detail.path;
+          tile.config.vaultVersion = detail.version;
           continue;
         }
       }
@@ -649,12 +877,20 @@ export class VaultService {
           oldStem === sanitizeFileName(prev.title) ||
           oldStem === prev.title
         ) {
+          this.prepareExisting(
+            full,
+            relPath,
+            tile.config.items,
+            prev.config.vaultVersion,
+            tile.type === "text",
+          );
           const dir = dirname(relPath) === "." ? "" : dirname(relPath);
           const newRel = this.allocatePath(tile.title, dir);
           const newFull = this.resolveSafe(newRel);
           try {
             mkdirSync(dirname(newFull), { recursive: true });
             renameSync(full, newFull);
+            this.invalidate(full, newFull);
             relPath = newRel;
             tile.config.vaultPath = newRel;
           } catch {
@@ -672,7 +908,13 @@ export class VaultService {
         !existsSync(this.resolveSafe(relPath));
 
       if (contentChanged) {
-        this.writeTileFile(tile, relPath);
+        this.writeTileFile(
+          tile,
+          relPath,
+          switchedPath
+            ? tile.config.vaultVersion
+            : (prev?.config.vaultVersion ?? tile.config.vaultVersion),
+        );
       }
     }
 
@@ -687,9 +929,6 @@ export class VaultService {
     });
 
     // 3. Tiles that were deleted (not moved to archive and not referenced by another active tile) get moved to the Vault trash/archiveFolder
-    const remainingPaths = new Set(
-      [...nextMap.values()].map((t) => t.config.vaultPath).filter(Boolean),
-    );
     for (const [id, prevTile] of prevMap.entries()) {
       const path = prevTile.config.vaultPath;
       if (
@@ -700,32 +939,30 @@ export class VaultService {
         !archivedVaultPaths.has(path) &&
         !remainingPaths.has(path)
       ) {
-        try {
-          this.trashNote(path);
-        } catch {
-          // Ignore if already deleted
-        }
+        this.trashNote(path, prevTile.config.vaultVersion);
       }
     }
     void c;
   }
 
-  private writeTileFile(tile: Tile | FolderChild, relPath: string) {
+  private writeTileFile(
+    tile: Tile | FolderChild,
+    relPath: string,
+    expectedVersion?: string,
+  ) {
     const full = this.resolveSafe(relPath);
     let frontmatter = "";
     let includeHeading = true;
     if (existsSync(full)) {
-      try {
-        const existing = parseVaultMarkdown(
-          readFileSync(full, "utf8"),
-          relPath,
-          tile.config.items,
-        );
-        frontmatter = existing.frontmatter;
-        includeHeading = existing.hasHeading;
-      } catch {
-        // Ignore read error
-      }
+      const existing = this.prepareExisting(
+        full,
+        relPath,
+        tile.config.items,
+        expectedVersion,
+        tile.type === "text",
+      );
+      frontmatter = existing.frontmatter;
+      includeHeading = existing.includeHeading;
     }
     const stem = basename(relPath, ".md");
     const shouldIncludeHeading =
@@ -733,17 +970,14 @@ export class VaultService {
       (tile.title.trim() !== "" &&
         sanitizeFileName(tile.title) !== stem &&
         tile.title.trim() !== stem);
-    mkdirSync(dirname(full), { recursive: true });
-    writeFileSync(
-      full,
-      formatVaultMarkdown({
-        title: tile.title,
-        body: tile.config.body,
-        items: tile.type === "data" ? tile.config.items : [],
-        frontmatter,
-        includeHeading: shouldIncludeHeading,
-      }),
-      "utf8",
-    );
+    const raw = formatVaultMarkdown({
+      title: tile.title,
+      body: tile.config.body,
+      items: tile.type === "data" ? tile.config.items : [],
+      frontmatter,
+      includeHeading: shouldIncludeHeading,
+    });
+    this.atomicWrite(full, raw);
+    tile.config.vaultVersion = vaultVersion(raw);
   }
 }

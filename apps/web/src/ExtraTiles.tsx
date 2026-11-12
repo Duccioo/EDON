@@ -538,7 +538,9 @@ export function AiLimitsTile({
           <div key={item.id || idx} className="ai-limit-row">
             <div className="ai-limit-head">
               <span className="ai-limit-name">{item.name}</span>
-              {item.note && <small className="ai-limit-note">{item.note}</small>}
+              {item.note && (
+                <small className="ai-limit-note">{item.note}</small>
+              )}
               <button
                 type="button"
                 className="ai-limit-step"
@@ -607,10 +609,7 @@ export function RadioTile({
 
   const customStream = tile.config.body.trim();
   const streams = customStream
-    ? [
-        customStream,
-        ...DJ_OSSO_STREAMS.filter((url) => url !== customStream),
-      ]
+    ? [customStream, ...DJ_OSSO_STREAMS.filter((url) => url !== customStream)]
     : DJ_OSSO_STREAMS;
   const activeStream = streams[streamIndex % streams.length];
 
@@ -713,9 +712,7 @@ export function RadioTile({
           type="button"
           className={`radio-play-btn ${playing ? "is-active" : ""}`}
           disabled={editing}
-          aria-label={
-            playing ? "Ferma DJ Osso Radio" : "Ascolta DJ Osso Radio"
-          }
+          aria-label={playing ? "Ferma DJ Osso Radio" : "Ascolta DJ Osso Radio"}
           onClick={(e) => {
             e.stopPropagation();
             void togglePlay();

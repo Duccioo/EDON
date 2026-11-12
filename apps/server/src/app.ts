@@ -98,10 +98,11 @@ function readPerformance(dataDir: string) {
   };
 }
 
-const agentPath = (pathname: string) =>
-  /^\/api\/(tiles|tile-types|layout|vault\/notes|vault\/note|performance|ai-limits)(\/|$)/.test(
-    pathname,
-  ) || pathname === "/mcp";
+const agentPath = (pathname: string, method: string) => {
+  if (pathname === "/mcp") return method === "POST";
+  if (/^\/api\/(tiles|tile-types|layout)(\/|$)/.test(pathname)) return true;
+  return method === "GET" && /^\/api\/vault\/(notes|note)(\?|$)/.test(pathname);
+};
 const bearer = (header: string | undefined) =>
   /^Bearer (\S+)$/i.exec(header ?? "")?.[1];
 
@@ -176,7 +177,7 @@ export async function buildApp(options: {
   };
   const app = Fastify({
     logger: options.logger ?? false,
-    bodyLimit: 2 * 1024 * 1024,
+    bodyLimit: 20 * 1024 * 1024,
   });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -220,7 +221,10 @@ export async function buildApp(options: {
         pathname.startsWith("/uploads/") ||
         pathname === "/mcp") &&
       !store.authenticated(req.cookies.session) &&
-      !(agentPath(pathname) && agentAuthorized(req.headers.authorization))
+      !(
+        agentPath(pathname, req.method) &&
+        agentAuthorized(req.headers.authorization)
+      )
     )
       return reply.code(401).send({ error: "Accedi per continuare." });
   });
@@ -247,7 +251,12 @@ export async function buildApp(options: {
     return reply.code(status).send({
       error:
         status === 413
-          ? "File troppo grande. Il limite è 10 MB."
+          ? typeof error === "object" &&
+            error &&
+            "code" in error &&
+            error.code === "FST_REQ_FILE_TOO_LARGE"
+            ? "File troppo grande. Il limite è 10 MB."
+            : "Richiesta JSON troppo grande. Il limite è 20 MB."
           : status >= 500
             ? "Salvataggio non riuscito. Riprova."
             : error instanceof Error
@@ -302,7 +311,7 @@ export async function buildApp(options: {
         return reply
           .code(401)
           .send({ error: "La password attuale non è corretta." });
-      store.changePassword(password);
+      store.changePassword(password, req.cookies.session);
       return { ok: true };
     },
   );
@@ -416,6 +425,10 @@ export async function buildApp(options: {
     const body = z
       .object({
         path: z.string().max(240).optional(),
+        version: z
+          .string()
+          .regex(/^[\da-f]{64}$/)
+          .optional(),
         folder: z.string().max(120).optional(),
         title: z.string().trim().min(1).max(120),
         body: z.string().max(10000).default(""),
@@ -437,21 +450,24 @@ export async function buildApp(options: {
     return note;
   });
   app.delete("/api/vault/note", async (req) => {
-    const { path } = z
-      .object({ path: z.string().min(1).max(240) })
+    const { path, version } = z
+      .object({
+        path: z.string().min(1).max(240),
+        version: z.string().regex(/^[\da-f]{64}$/),
+      })
       .parse(req.query ?? {});
-    const canonical = vault.readNote(path).path;
-    const res = vault.trashNote(canonical);
+    const detail = vault.readNote(path);
+    const res = vault.trashNote(detail.path, version);
     store.mutate((d) => {
-      d.tiles = d.tiles.filter((t) => t.config.vaultPath !== canonical);
+      d.tiles = d.tiles.filter((t) => t.config.vaultPath !== detail.path);
       for (const t of d.tiles) {
         if (t.type === "folder" && t.config.children) {
           t.config.children = t.config.children.filter(
-            (c) => c.config.vaultPath !== canonical,
+            (c) => c.config.vaultPath !== detail.path,
           );
         }
       }
-      d.archive = d.archive.filter((t) => t.config.vaultPath !== canonical);
+      d.archive = d.archive.filter((t) => t.config.vaultPath !== detail.path);
     });
     return { ok: true, ...res };
   });

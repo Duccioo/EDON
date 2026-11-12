@@ -222,6 +222,43 @@ test("authenticated storage, conflicts, safe uploads and persistence after resta
   }
 });
 
+test("JSON body limit accepts large model archives and reports JSON 413s accurately", async () => {
+  const app = await buildApp({
+    dataDir: await mkdtemp(join(tmpdir(), "edon-json-limit-")),
+  });
+  try {
+    const setup = await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "edon-test-password" },
+    });
+    const cookie = `session=${setup.cookies[0].value}`;
+    const desktop = (
+      await app.inject({ url: "/api/desktop", headers: { cookie } })
+    ).json();
+    const accepted = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: { ...desktop, archivePadding: "x".repeat(17 * 1024 * 1024) },
+    });
+    assert.equal(accepted.statusCode, 200);
+    const rejected = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: {
+        ...(accepted.json() as Record<string, unknown>),
+        archivePadding: "x".repeat(21 * 1024 * 1024),
+      },
+    });
+    assert.equal(rejected.statusCode, 413);
+    assert.match(rejected.json().error, /JSON.*20 MB/);
+  } finally {
+    await app.close();
+  }
+});
+
 test("compacting removes gaps without overlaps or leaving the grid", () => {
   const desktop = seedDesktop();
   desktop.settings.rows = 40;

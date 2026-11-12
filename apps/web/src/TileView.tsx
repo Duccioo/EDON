@@ -26,8 +26,18 @@ import {
 export function tileStyle(
   tile: Tile,
   settings: Desktop["settings"],
+  paper = false,
 ): CSSProperties {
   const a = tile.appearance;
+  if (paper)
+    return {
+      "--tile-accent": a.background,
+      "--check-ink": "#f7f5ed",
+      backgroundColor: `color-mix(in srgb, ${a.background} 9%, #f7f5ed)`,
+      color: "#1c201e",
+      backgroundImage: "none",
+      padding: settings.padding,
+    } as CSSProperties;
   return {
     "--check-ink": a.background,
     backgroundColor: `color-mix(in srgb, ${a.background} ${settings.opacity * (settings.blur ? 78 : 100)}%, transparent)`,
@@ -109,10 +119,11 @@ function InlineNoteEditor({
         </span>
       </div>
       {canEdit && updateTitle ? (
-        <input
+        <textarea
           className="inline-title-input text-headline"
           aria-label="Titolo"
           maxLength={120}
+          rows={Math.max(1, Math.min(3, tile.title.split("\n").length))}
           value={tile.title}
           onChange={(e) => updateTitle(e.target.value)}
         />

@@ -19,6 +19,8 @@ test("development proxy preserves the browser origin for setup, login and writes
   const vite = await createServer({
     ...loaded.config,
     configFile: false,
+    cacheDir: join(dataDir, "vite-cache"),
+    optimizeDeps: { noDiscovery: true, include: [] },
     server: {
       ...loaded.config.server,
       port: 0,

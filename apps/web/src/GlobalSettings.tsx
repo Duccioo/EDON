@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Desktop } from "../../../packages/shared/model";
 import { upload } from "./api";
 import { AppearancePreview } from "./AppearancePreview";
@@ -20,8 +20,10 @@ export function GlobalSettings({
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const patch = (value: Partial<Desktop["settings"]>) => {
-    const accepted = onChange({ ...settings, ...value });
+    const accepted = onChange({ ...settingsRef.current, ...value });
     setError(
       accepted
         ? ""

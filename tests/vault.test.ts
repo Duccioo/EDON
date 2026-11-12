@@ -137,6 +137,7 @@ test("Obsidian Vault integration syncs tiles, notes, TODOs, archive and trash tw
         title: "Roadmap Q4",
         config: {
           vaultPath: "Progetti/Roadmap.md",
+          vaultVersion: detail.version,
           body: detail.body,
           items: [
             { id: "1", text: "Sincronizzare vault", done: true },
@@ -145,7 +146,7 @@ test("Obsidian Vault integration syncs tiles, notes, TODOs, archive and trash tw
         },
       },
     });
-    assert.equal(pinnedRes.statusCode, 201);
+    assert.equal(pinnedRes.statusCode, 201, pinnedRes.body);
 
     const updatedRoadmap = await readFile(
       join(vaultDir, "Progetti", "Roadmap.md"),

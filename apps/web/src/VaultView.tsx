@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   BookOpen,
@@ -49,7 +49,13 @@ export type VaultNoteDetail = VaultNoteSummary & {
   body: string;
   items: Tile["config"]["items"];
   obsidianUrl: string;
+  /** Optimistic-concurrency token supplied by the backend. */
+  version: string;
 };
+
+function noteConcurrency(note: VaultNoteDetail) {
+  return { updatedAt: note.updatedAt, version: note.version };
+}
 
 export function VaultSettings({ onChanged }: { onChanged?: () => void }) {
   const [status, setStatus] = useState<VaultStatus | null>(null);
@@ -225,7 +231,16 @@ export function VaultView({
   const [draftTitle, setDraftTitle] = useState("");
   const [draftBody, setDraftBody] = useState("");
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [mutating, setMutating] = useState(false);
   const [error, setError] = useState("");
+  const selectedPathRef = useRef(selectedPath);
+  selectedPathRef.current = selectedPath;
+  const listSequence = useRef(0);
+  const listController = useRef<AbortController | null>(null);
+  const detailSequence = useRef(0);
+  const detailController = useRef<AbortController | null>(null);
+  const mutationActive = useRef(false);
 
   useEffect(() => {
     setActiveFolder(initialFolder === "*" ? "" : initialFolder);
@@ -237,8 +252,12 @@ export function VaultView({
 
   const loadList = useCallback(
     async (keepSelection = true) => {
+      const sequence = ++listSequence.current;
+      listController.current?.abort();
+      const controller = new AbortController();
+      listController.current = controller;
+      setLoading(true);
       try {
-        setLoading(true);
         const params = new URLSearchParams();
         if (query.trim()) params.set("q", query.trim());
         if (activeFolder) params.set("folder", activeFolder);
@@ -246,50 +265,96 @@ export function VaultView({
           vaultName: string;
           folders: string[];
           notes: VaultNoteSummary[];
-        }>(`/api/vault/notes?${params.toString()}`);
+        }>(`/api/vault/notes?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        if (sequence !== listSequence.current) return;
         setVaultName(res.vaultName);
         setFolders(res.folders);
         setNotes(res.notes);
         setError("");
-        if (!keepSelection || !selectedPath) {
-          const first = res.notes[0]?.path ?? "";
-          setSelectedPath(first);
-        } else if (
-          selectedPath &&
-          !res.notes.some((n) => n.path === selectedPath)
+        const currentPath = selectedPathRef.current;
+        if (
+          !keepSelection ||
+          !currentPath ||
+          !res.notes.some((note) => note.path === currentPath)
         ) {
-          setSelectedPath(res.notes[0]?.path ?? "");
+          const first = res.notes[0]?.path ?? "";
+          selectedPathRef.current = first;
+          setSelectedPath(first);
+          if (!first) setDetail(null);
         }
       } catch (e) {
-        setError((e as Error).message);
+        if (sequence === listSequence.current && !controller.signal.aborted)
+          setError((e as Error).message);
       } finally {
-        setLoading(false);
+        if (sequence === listSequence.current) setLoading(false);
       }
     },
-    [activeFolder, query, selectedPath],
+    [activeFolder, query],
   );
 
   useEffect(() => {
     void loadList(true);
+    return () => {
+      listSequence.current++;
+      listController.current?.abort();
+    };
   }, [loadList]);
 
+  useEffect(
+    () => () => {
+      detailSequence.current++;
+      detailController.current?.abort();
+      listSequence.current++;
+      listController.current?.abort();
+    },
+    [],
+  );
+
   useEffect(() => {
+    const sequence = ++detailSequence.current;
+    detailController.current?.abort();
+    setDetail(null);
     if (!selectedPath || creating) {
-      if (!creating) setDetail(null);
+      setDetailLoading(false);
       return;
     }
+    const path = selectedPath;
+    const controller = new AbortController();
+    detailController.current = controller;
+    setDetailLoading(true);
     request<VaultNoteDetail>(
-      `/api/vault/note?path=${encodeURIComponent(selectedPath)}`,
+      `/api/vault/note?path=${encodeURIComponent(path)}`,
+      { signal: controller.signal },
     )
-      .then((d) => {
-        setDetail(d);
+      .then((note) => {
+        if (
+          sequence !== detailSequence.current ||
+          note.path !== path ||
+          selectedPathRef.current !== path
+        )
+          return;
+        setDetail(note);
         setEditing(false);
+        setError("");
       })
-      .catch((e) => setError((e as Error).message));
+      .catch((e) => {
+        if (sequence !== detailSequence.current || controller.signal.aborted)
+          return;
+        setDetail(null);
+        setError((e as Error).message);
+      })
+      .finally(() => {
+        if (sequence === detailSequence.current) setDetailLoading(false);
+      });
+    return () => controller.abort();
   }, [selectedPath, creating]);
 
-  const pinnedTile = detail
-    ? desktop.tiles.find((t) => t.config.vaultPath === detail.path)
+  const visibleDetail =
+    detail && detail.path === selectedPath && !creating ? detail : null;
+  const pinnedTile = visibleDetail
+    ? desktop.tiles.find((t) => t.config.vaultPath === visibleDetail.path)
     : undefined;
 
   const folderPinned = desktop.tiles.some(
@@ -310,6 +375,7 @@ export function VaultView({
   };
 
   const startCreate = () => {
+    if (mutationActive.current) return;
     setDraftTitle("");
     setDraftBody("");
     setCreating(true);
@@ -319,65 +385,95 @@ export function VaultView({
 
   const saveNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!draftTitle.trim()) return;
+    if (!draftTitle.trim() || mutationActive.current) return;
+    const wasCreating = creating;
+    const source = visibleDetail;
+    if (!wasCreating && !source) return;
+    mutationActive.current = true;
+    setMutating(true);
+    setError("");
     try {
       const saved = await request<VaultNoteDetail>("/api/vault/note", {
         method: "PUT",
         body: JSON.stringify({
-          path: creating ? undefined : detail?.path,
-          folder: creating ? activeFolder : undefined,
+          path: wasCreating ? undefined : source!.path,
+          folder: wasCreating ? activeFolder : undefined,
           title: draftTitle.trim(),
           body: draftBody,
+          ...(!wasCreating && source ? noteConcurrency(source) : {}),
         }),
       });
+      selectedPathRef.current = saved.path;
       setCreating(false);
       setEditing(false);
       setSelectedPath(saved.path);
       setDetail(saved);
       await loadList(true);
       onRefreshDesktop();
-      onNotice(creating ? "Nota creata nel vault." : "Nota salvata nel vault.");
+      onNotice(
+        wasCreating ? "Nota creata nel vault." : "Nota salvata nel vault.",
+      );
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      mutationActive.current = false;
+      setMutating(false);
     }
   };
 
   const toggleNoteItem = async (itemId: string) => {
-    if (!detail) return;
-    const updatedItems = detail.items.map((i) =>
+    const note = visibleDetail;
+    if (!note || mutationActive.current) return;
+    const updatedItems = note.items.map((i) =>
       i.id === itemId ? { ...i, done: !i.done } : i,
     );
+    mutationActive.current = true;
+    setMutating(true);
+    setError("");
     try {
       const saved = await request<VaultNoteDetail>("/api/vault/note", {
         method: "PUT",
         body: JSON.stringify({
-          path: detail.path,
-          title: detail.title,
-          body: detail.body,
+          path: note.path,
+          title: note.title,
+          body: note.body,
           items: updatedItems,
+          ...noteConcurrency(note),
         }),
       });
-      setDetail(saved);
+      if (selectedPathRef.current === note.path) setDetail(saved);
       await loadList(true);
       onRefreshDesktop();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      mutationActive.current = false;
+      setMutating(false);
     }
   };
 
   const deleteNote = async () => {
-    if (!detail) return;
+    const note = visibleDetail;
+    if (!note || mutationActive.current) return;
+    mutationActive.current = true;
+    setMutating(true);
+    setError("");
     try {
-      await request(`/api/vault/note?path=${encodeURIComponent(detail.path)}`, {
-        method: "DELETE",
-      });
+      await request(
+        `/api/vault/note?path=${encodeURIComponent(note.path)}${note.version !== undefined ? `&version=${encodeURIComponent(note.version)}` : ""}`,
+        { method: "DELETE" },
+      );
       setDetail(null);
+      selectedPathRef.current = "";
       setSelectedPath("");
       await loadList(false);
       onRefreshDesktop();
-      onNotice(`“${detail.title}” spostata nel cestino del vault.`);
+      onNotice(`“${note.title}” spostata nel cestino del vault.`);
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      mutationActive.current = false;
+      setMutating(false);
     }
   };
 
@@ -405,6 +501,7 @@ export function VaultView({
               <input
                 type="search"
                 value={query}
+                disabled={mutating}
                 placeholder="Cerca nel vault…"
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -413,6 +510,7 @@ export function VaultView({
               className="icon-button"
               title="Nuova nota nel vault"
               aria-label="Nuova nota nel vault"
+              disabled={mutating}
               onClick={startCreate}
             >
               <Plus size={16} />
@@ -424,6 +522,7 @@ export function VaultView({
               role="tab"
               aria-selected={activeFolder === ""}
               className={activeFolder === "" ? "active" : ""}
+              disabled={mutating}
               onClick={() => setActiveFolder("")}
             >
               {activeFolder === "" ? (
@@ -439,6 +538,7 @@ export function VaultView({
                 role="tab"
                 aria-selected={activeFolder === f}
                 className={activeFolder === f ? "active" : ""}
+                disabled={mutating}
                 onClick={() => setActiveFolder(f)}
               >
                 {activeFolder === f ? (
@@ -490,6 +590,7 @@ export function VaultView({
                       className={
                         selectedPath === n.path && !creating ? "active" : ""
                       }
+                      disabled={mutating}
                       onClick={() => {
                         setCreating(false);
                         setEditing(false);
@@ -533,7 +634,16 @@ export function VaultView({
       )}
 
       <section className="vault-reader" aria-label="Contenuto nota">
-        {editing ? (
+        {error && (
+          <p role="alert" className="error-text vault-request-error">
+            {error}
+          </p>
+        )}
+        {detailLoading ? (
+          <div className="archive-empty" role="status">
+            <p>Apro la nota…</p>
+          </div>
+        ) : editing ? (
           <form className="vault-editor" onSubmit={saveNote}>
             <label>
               Titolo della nota
@@ -581,12 +691,12 @@ export function VaultView({
               >
                 Annulla
               </button>
-              <button type="submit" className="primary">
-                Salva nel vault
+              <button type="submit" className="primary" disabled={mutating}>
+                {mutating ? "Salvataggio…" : "Salva nel vault"}
               </button>
             </div>
           </form>
-        ) : detail ? (
+        ) : visibleDetail ? (
           <>
             <header className="vault-reader-head">
               <div>
@@ -602,9 +712,9 @@ export function VaultView({
                     <List size={14} />
                     {showList ? "Solo documento" : "Elenco note"}
                   </button>
-                  <span className="vault-note-path">{detail.path}</span>
+                  <span className="vault-note-path">{visibleDetail.path}</span>
                 </div>
-                <h3>{detail.title}</h3>
+                <h3>{visibleDetail.title}</h3>
               </div>
               <div className="vault-reader-actions">
                 {pinnedTile ? (
@@ -620,19 +730,23 @@ export function VaultView({
                   <button
                     type="button"
                     className="primary"
-                    onClick={() => onPinNote(detail)}
+                    onClick={() => onPinNote(visibleDetail)}
                   >
                     <Pin size={15} />
                     Fissa sul desktop
                   </button>
                 )}
-                <button type="button" onClick={() => startEdit(detail)}>
+                <button
+                  type="button"
+                  disabled={mutating}
+                  onClick={() => startEdit(visibleDetail)}
+                >
                   <Pencil size={15} />
                   Modifica
                 </button>
                 <a
                   className="button-link"
-                  href={detail.obsidianUrl}
+                  href={visibleDetail.obsidianUrl}
                   title="Apri nell’app Obsidian"
                 >
                   Obsidian <ArrowUpRight size={14} />
@@ -641,7 +755,8 @@ export function VaultView({
                   type="button"
                   className="danger"
                   title="Sposta nel cestino del vault"
-                  aria-label={`Cestina ${detail.title}`}
+                  aria-label={`Cestina ${visibleDetail.title}`}
+                  disabled={mutating}
                   onClick={deleteNote}
                 >
                   <Trash2 size={15} />
@@ -651,16 +766,20 @@ export function VaultView({
             <div
               className="vault-reader-body"
               title="Doppio clic per modificare la nota"
-              onDoubleClick={() => startEdit(detail)}
+              onDoubleClick={() => startEdit(visibleDetail)}
             >
-              {detail.body && <MarkdownContent text={detail.body} />}
-              {detail.items.length > 0 && (
+              {visibleDetail.body && (
+                <MarkdownContent text={visibleDetail.body} />
+              )}
+              {visibleDetail.items.length > 0 && (
                 <ul className="checklist">
-                  {detail.items.map((item) => (
+                  {visibleDetail.items.map((item) => (
                     <li key={item.id}>
                       <button
                         type="button"
                         className={`check-item ${item.done ? "checked" : ""}`}
+                        disabled={mutating}
+                        aria-busy={mutating}
                         onClick={() => void toggleNoteItem(item.id)}
                       >
                         <span
@@ -674,7 +793,7 @@ export function VaultView({
                   ))}
                 </ul>
               )}
-              {!detail.body && detail.items.length === 0 && (
+              {!visibleDetail.body && visibleDetail.items.length === 0 && (
                 <p className="hint">
                   Questa nota è vuota. Doppio clic per scrivere.
                 </p>

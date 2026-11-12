@@ -46,7 +46,8 @@ export function CaptureComposer({
   const currentBody = useRef(body);
   currentBody.current = body;
   const detectedLink = detectLinks ? captureLink(body) : null;
-  const link = detectedLink && kind === "text" && !forceNote ? detectedLink : null;
+  const link =
+    detectedLink && kind === "text" && !forceNote ? detectedLink : null;
   const looksLikeTodo =
     /^\s*[-*+]\s+\[[ xX]\]/m.test(body) || /^\s*(?:todo|lista)\s*:/i.test(body);
   const lastNewline = !compact ? body.lastIndexOf("\n") : -1;
@@ -123,8 +124,7 @@ export function CaptureComposer({
   function save() {
     if (busy) return;
     try {
-      const effectiveSource =
-        kind === "data" ? convertBodyToTodo(body) : body;
+      const effectiveSource = kind === "data" ? convertBodyToTodo(body) : body;
       onSave(link ?? parseCapture(effectiveSource, kind, title));
       if (compact) {
         setBody("");

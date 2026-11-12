@@ -69,6 +69,42 @@ test("folder children validate types, limits and safe links", () => {
   );
 });
 
+test("desktop IDs and external keys are globally unique across folders and archive", () => {
+  const desktop = seedDesktop();
+  const folder = createTile("folder", []);
+  const child = createFolderChild("text");
+  folder.config.children = [child];
+  const active = desktop.tiles[0];
+  const archived = { ...desktop.tiles.find((t) => t.type === "text")! };
+
+  folder.config.children = [{ ...child, id: active.id }];
+  assert.equal(
+    desktopSchema.safeParse({ ...desktop, tiles: [...desktop.tiles, folder] })
+      .success,
+    false,
+  );
+  folder.config.children = [{ ...child, id: archived.id }];
+  assert.equal(
+    desktopSchema.safeParse({
+      ...desktop,
+      tiles: [...desktop.tiles.filter((t) => t.id !== archived.id), folder],
+      archive: [archived],
+    }).success,
+    false,
+  );
+
+  active.externalKey = "shared-key";
+  archived.externalKey = "shared-key";
+  assert.equal(
+    desktopSchema.safeParse({
+      ...desktop,
+      tiles: desktop.tiles.filter((t) => t.id !== archived.id),
+      archive: [archived],
+    }).success,
+    false,
+  );
+});
+
 test("agents manage folders and passwords change securely", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "edon-folder-"));
   const app = await buildApp({ dataDir });
@@ -151,6 +187,12 @@ test("agents manage folders and passwords change securely", async () => {
       },
     });
     assert.equal(wrong.statusCode, 401);
+    const otherLogin = await app.inject({
+      method: "POST",
+      url: "/api/login",
+      payload: { password: "una-password-lunga" },
+    });
+    const otherCookie = `session=${otherLogin.cookies[0].value}`;
     const changed = await app.inject({
       method: "POST",
       url: "/api/password",
@@ -161,6 +203,20 @@ test("agents manage folders and passwords change securely", async () => {
       },
     });
     assert.equal(changed.statusCode, 200);
+    assert.equal(
+      (await app.inject({ url: "/api/desktop", headers: { cookie } }))
+        .statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          url: "/api/desktop",
+          headers: { cookie: otherCookie },
+        })
+      ).statusCode,
+      401,
+    );
     const login = await app.inject({
       method: "POST",
       url: "/api/login",

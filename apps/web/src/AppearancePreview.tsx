@@ -2,8 +2,31 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { StickyNote } from "lucide-react";
 import type { Desktop } from "../../../packages/shared/model";
 import { fitBoard } from "../../../packages/shared/board";
-import { TileView, tileStyle } from "./TileView";
+import { tileStyle } from "./TileView";
 import { AnimatedWallpaper } from "./AnimatedWallpaper";
+
+function StaticTilePreview({ tile }: { tile: Desktop["tiles"][number] }) {
+  return (
+    <div className="tile-preview static-tile-preview" data-static-preview>
+      <div className="tile-top">
+        <span>{tile.subtitle || tile.type}</span>
+      </div>
+      <h2>{tile.title}</h2>
+      {tile.type === "data" ? (
+        <p>
+          {tile.config.items.filter((item) => item.done).length} /{" "}
+          {tile.config.items.length} completati
+        </p>
+      ) : tile.type === "folder" ? (
+        <p>{tile.config.children?.length ?? 0} elementi</p>
+      ) : tile.type === "image" && tile.config.image ? (
+        <img className="tile-media" src={tile.config.image} alt="" />
+      ) : (
+        <p>{tile.config.body}</p>
+      )}
+    </div>
+  );
+}
 
 export function AppearancePreview({
   settings,
@@ -99,9 +122,7 @@ export function AppearancePreview({
                   height: tile.h * board.cellHeight + (tile.h - 1) * board.gap,
                 }}
               >
-                <div className="tile-preview">
-                  <TileView tile={tile} editing toggleItem={() => {}} />
-                </div>
+                <StaticTilePreview tile={tile} />
               </article>
             ))}
           </div>
