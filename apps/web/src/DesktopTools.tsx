@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Archive,
   BookOpen,
@@ -43,26 +43,13 @@ export function DesktopTools({
   onHeightChange: (height: number) => void;
 }) {
   const [more, setMore] = useState(false);
-  const ref = useRef<HTMLElement>(null);
   useEffect(() => {
-    const observer = new ResizeObserver(() => {
-      if (ref.current) {
-        // Reserve only the compact resting height so multi-line typing overlays the bottom
-        // instead of shrinking the desktop grid at the top.
-        onHeightChange(
-          Math.min(64, Math.round(ref.current.getBoundingClientRect().height)),
-        );
-      }
-    });
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
+    // Reserve the compact dock height up front. Growing content overlays the bottom
+    // instead of shrinking the desktop grid by a few pixels when controls appear.
+    onHeightChange(64);
   }, [onHeightChange]);
   return (
-    <nav
-      ref={ref}
-      className="desktop-tools capture-tools"
-      aria-label="Strumenti desktop"
-    >
+    <nav className="desktop-tools capture-tools" aria-label="Strumenti desktop">
       <div className="tool-actions">
         {editing && (
           <>
