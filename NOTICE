@@ -1,0 +1,9 @@
+# Asset provenance
+
+The MIT License covers the project's original code and original assets. The SVG illustrations in `apps/web/public/art` are original project assets.
+
+Space Grotesk and Doto are distributed through their Fontsource packages under the SIL Open Font License; consult the corresponding package license files. Third-party npm dependencies retain their own licenses.
+
+Third-party design-reference images with unverified redistribution rights are not included in the public source tree.
+
+The screenshots in `docs/screenshots` are project documentation captures, not independent design assets.
