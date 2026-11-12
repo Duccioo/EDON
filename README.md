@@ -1,3 +1,5 @@
+![EDON — A private, local-first desktop](docs/images/readme-cover.png)
+
 # EDON
 
 **A private, local-first desktop made of tiles.** Notes, tasks, files, widgets, a Markdown vault and an agent API — all on your machine.
