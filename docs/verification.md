@@ -6,11 +6,11 @@ Ambiente osservato: macOS, Node **26.12.1**, npm **11.20.0**, Google Chrome loca
 
 | Controllo                  | Esito osservato                                                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------- |
-| `npm test`                 | **Superato**: 46/46 test                                                                          |
+| `npm test`                 | **Superato**: 54/54 test                                                                          |
 | `npm run build`            | **Superato**: TypeScript e build Vite; resta un avviso non bloccante sul chunk principale >500 kB |
 | `npm run format:check`     | **Superato**                                                                                      |
 | `npm audit`                | **Superato**: zero vulnerabilità note                                                             |
-| `npm run test:e2e`         | **Superato**: 36/36 test, incluse regressioni di concorrenza, mobile, upload e conflitti          |
+| `npm run test:e2e`         | **Superato**: 37/37 test, incluse regressioni di concorrenza, mobile, upload e conflitti          |
 | Docker/Compose             | **Non verificato localmente**: daemon e sottocomando Compose non disponibili                      |
 | Node 24 e Chromium gestito | **Delegati alla CI** su Ubuntu; questa esecuzione locale usa Node 26 e Chrome                     |
 | README inglese e link      | **Superato**: nessun link locale o immagine mancante nel repository                               |
@@ -28,6 +28,18 @@ Ambiente osservato: macOS, Node **26.12.1**, npm **11.20.0**, Google Chrome loca
 - Il container pubblicato non è stato avviato manualmente su questa macchina locale; build, test e pubblicazione multi-architettura sono stati eseguiti dalla CI.
 
 Le regressioni aggiunte coprono token vault in sola lettura, note non modificabili senza perdite, versioni Markdown, scritture atomiche, symlink, conflitti senza effetti parziali, collegamento di note non vuote, richieste fuori ordine, upload tardivi e workspace mobili. Non si deduce un esito positivo dai verbali storici.
+
+## Correzioni post-review — main, non ancora rilasciate
+
+Una revisione indipendente con Claude Opus 5.5 ha individuato tre blocchi Obsidian non coperti dalla v0.1.0. Su `main` sono stati corretti e coperti da test:
+
+- snapshot client aggiornato con i path assegnati dal server e fallback server per snapshot obsoleti, per evitare file duplicati;
+- API tile con Bearer che non possono creare/modificare note, collegare file o cestinare note del vault, né attivare sincronizzazioni implicite;
+- note rinominate o cancellate fuori da EDON che non vengono ricreate al vecchio path;
+- rifiuto preventivo di due tile sullo stesso file, senza scritture parziali;
+- titoli seed a riga singola e test di layout browser stabilizzato con `expect.poll`.
+
+I nuovi test portano la suite a **54 test backend** e **37 test browser**, inclusa una prova E2E con un vault temporaneo reale e due salvataggi ravvicinati. La correzione sarà pubblicata in una release patch successiva; `v0.1.0` resta la release pubblica precedente.
 
 ## Modello per successive release
 

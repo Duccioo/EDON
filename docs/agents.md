@@ -57,8 +57,8 @@ In **Impostazioni → Agente AI** inserisci URL, chiave e modello; **Verifica co
 - Le creazioni hanno `origin: "agent"` e usano il primo spazio libero; non spostano tile esistenti.
 - Gli agenti possono aggiornare contenuto/aspetto delle tile, ma ridimensionare, spostare ed eliminare soltanto quelle `origin: "agent"`.
 - Usa `upsert_tile` o `PUT /api/tiles/by-key/:key` con una chiave stabile per contenuti ricorrenti. `expiresAt` rimuove la tile alla scadenza.
-- Le cartelle contengono fino a 24 mini-tile in `config.children`, senza annidamento; `config.vaultPath` può puntare a una directory vault o `*`.
-- Note e TODO possono collegare `config.vaultPath`. Le API tile restano soggette alle regole di sincronizzazione del vault: tratta token e contenuti come sensibili e prova le automazioni su una copia.
+- Le cartelle contengono fino a 24 mini-tile in `config.children`, senza annidamento. Gli agenti non possono impostare `config.vaultPath`.
+- Note e TODO collegati al vault e le cartelle vault si gestiscono dalla sessione del browser. Con un vault attivo, le API tile con Bearer rifiutano la creazione/modifica di note e TODO e qualsiasi tentativo di collegamento o eliminazione di file vault.
 - Meteo: `config.location`; timer/scadenza: `config.startsAt` e `config.endsAt`; file: `config.file` deve essere un `/uploads/…` già caricato. Gli agenti non possono caricare file.
 - Tipi disponibili: `text`, `data`, `link`, `image`, `clock`, `folder`, `weather`, `progress`, `file`, `performance`, `ai_limits`, `radio`. `list_tile_types` è la fonte aggiornata per campi e limiti.
 - Le tile sono dichiarative: nessun JavaScript inviato da un agente viene eseguito.

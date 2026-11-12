@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing tag to publish, for example v0.1.0
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -34,11 +28,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
       - name: Verify package and tag versions match
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           test "$RELEASE_TAG" = "v$(node -p 'require("./package.json").version')"
       - uses: docker/setup-qemu-action@v3
@@ -53,9 +45,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}},value=${{ inputs.tag || github.ref_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag || github.ref_name }}
-            type=raw,value=latest,enable=${{ !contains(inputs.tag || github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
           labels: |
             org.opencontainers.image.title=EDON
             org.opencontainers.image.description=Private local-first desktop made of tiles
@@ -77,12 +69,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         run: |
           NOTES=$(gh api --method POST \

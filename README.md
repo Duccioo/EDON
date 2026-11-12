@@ -30,7 +30,7 @@ Most dashboards turn into another inbox. EDON is designed as a quiet personal ca
 - Global appearance controls for spacing, shape, borders, opacity, glass and animated wallpapers.
 - Folders with up to 24 child tiles, including vault-backed folders.
 - Optional Obsidian vault integration with version checks, atomic writes, trash handling and symlink confinement.
-- External agents through `Authorization: Bearer …`, REST or `/mcp`. Vault access is read-only for agents.
+- External agents through `Authorization: Bearer …`, REST or `/mcp`. Vault access is read-only for agents; with a Vault active, creating or editing notes/todos, linking Vault paths and mutating Vault files require a browser session.
 - JSON export/import of the desktop plus documented on-disk backup.
 
 ## Quick start
@@ -113,7 +113,7 @@ Configure the vault in **Settings → Integrations → Obsidian Vault**, or thro
 
 ## Agents and MCP
 
-Create a token in **Settings → Agents and tokens**, or set `EDON_AGENT_TOKEN`. The token grants access to tile/layout APIs and MCP. Vault reads are allowed; vault writes, deletions, telemetry, uploads and configuration require a browser session.
+Create a token in **Settings → Agents and tokens**, or set `EDON_AGENT_TOKEN`. The token grants access to tile/layout APIs and MCP. Vault reads are allowed. With a Vault active, note/todo creation and editing, Vault path linking, file deletion, telemetry, uploads and configuration require a browser session; agent tile operations never trigger a Vault sync.
 
 ```http
 Authorization: Bearer edon_…

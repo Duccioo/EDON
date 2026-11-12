@@ -25,7 +25,7 @@ If private reporting is unavailable, open a contact request without technical de
 
 - Protect `data/desktop.sqlite`, `data/uploads/` and backups: they contain private data. Hermes keys saved through the UI are stored in plain text in SQLite.
 - Password hashes use scrypt. Session and agent tokens are stored as hashes. `EDON_AGENT_TOKEN` and Hermes environment variables are deployment secrets.
-- Bearer tokens are limited to tile/layout APIs and MCP. Vault reads are allowed for agents; vault configuration and direct note writes/deletions require an authenticated browser session.
+- Bearer tokens are limited to tile/layout APIs and MCP. Vault reads are allowed for agents. With a Vault active, agents cannot create or edit notes/todos, link Vault paths, or delete Vault-backed files; those operations require an authenticated browser session. Agent tile operations never trigger a Vault sync.
 - The Docker `/vault` mount is read/write: EDON can create, overwrite, rename and move Markdown files. Mount only the intended vault and keep independent backups.
 - Do not expose EDON directly to the Internet. Use HTTPS or a VPN, set `COOKIE_SECURE=true` behind HTTPS and configure the password before exposing the service.
 - Keep dependencies and GitHub Actions updated. An audit does not replace review of permissions, deployment and backups.

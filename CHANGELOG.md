@@ -4,7 +4,19 @@ All notable changes are documented here. The format is inspired by [Keep a Chang
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- Prevented duplicate Vault files when a desktop save completes while another local edit is waiting; the client now adopts server-assigned `vaultPath`/`vaultVersion` and the server reuses an existing path for stale snapshots.
+- Enforced the documented read-only Vault boundary for Bearer agents: tile APIs cannot create or edit notes/todos while a Vault is active, nor link, overwrite or trash Vault files. Agent operations no longer trigger an implicit Vault sync.
+- A note renamed or deleted outside EDON is no longer recreated at its old path. Unrelated desktop saves still succeed; editing the missing note returns a clear conflict.
+- Rejected duplicate tiles pointing to the same Vault file before any filesystem write, preventing partial saves.
+- Seed titles no longer contain line breaks that would be lost when exported as Markdown headings.
+- Made the responsive tile-layout browser test wait for stable layout instead of reading geometry mid-transition.
+- Removed the manual release dispatch path, which could verify a different commit from the tag.
+
+### Added
+
+- Nine regression tests covering Vault save races, agent write denial, missing external notes, duplicate links, snapshot merging, folder children, seed titles and a real-browser Vault flow with the polling interval.
 
 ## [0.1.0] - 2026-11-12
 
