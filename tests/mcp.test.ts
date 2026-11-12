@@ -51,24 +51,37 @@ test("MCP tools use the same tile service as the REST API", async () => {
     const a = text(
       await client.callTool({
         name: "upsert_tile",
-        arguments: { key: "daily-news", type: "data", title: "Notizie" },
+        arguments: {
+          key: "daily-news",
+          type: "link",
+          title: "Notizie",
+          url: "https://example.com/news",
+        },
       }),
     );
     const b = text(
       await client.callTool({
         name: "upsert_tile",
-        arguments: { key: "daily-news", config: { body: "oggi" } },
+        arguments: {
+          key: "daily-news",
+          subtitle: "Aggiornate oggi",
+        },
       }),
     );
     assert.equal(a.created, true);
     assert.equal(b.created, false);
     assert.equal(b.tile.id, a.tile.id);
-    assert.equal(b.tile.config.body, "oggi");
+    assert.equal(b.tile.subtitle, "Aggiornate oggi");
     const bad = await client.callTool({
       name: "create_tile",
       arguments: { type: "link", url: "javascript:x" },
     });
     assert.equal(bad.isError, true);
+    const vaultWrite = await client.callTool({
+      name: "create_tile",
+      arguments: { type: "text", title: "MCP write", config: { body: "no" } },
+    });
+    assert.equal(vaultWrite.isError, true);
     const layout = text(
       await client.callTool({ name: "get_layout", arguments: {} }),
     );

@@ -18,6 +18,7 @@ import {
   layoutInput,
   patchInput,
   upsertInput,
+  type TileActor,
 } from "./tiles";
 import { registerMcp } from "./mcp";
 import { WeatherError, WeatherService } from "./weather";
@@ -175,6 +176,8 @@ export async function buildApp(options: {
       return true;
     return store.tokenValid(token);
   };
+  const actorFor = (session: string | undefined): TileActor =>
+    store.authenticated(session) ? "session" : "agent";
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: 20 * 1024 * 1024,
@@ -343,16 +346,25 @@ export async function buildApp(options: {
   // Agent API: also reachable with `Authorization: Bearer <token>`.
   app.get("/api/tiles", async () => ({ tiles: tiles.list() }));
   app.post("/api/tiles", async (req, reply) =>
-    reply.code(201).send({ tile: tiles.create(createInput.parse(req.body)) }),
+    reply.code(201).send({
+      tile: tiles.create(
+        createInput.parse(req.body),
+        actorFor(req.cookies.session),
+      ),
+    }),
   );
   app.get<{ Params: { id: string } }>("/api/tiles/:id", async (req) => ({
     tile: tiles.get(req.params.id),
   }));
   app.patch<{ Params: { id: string } }>("/api/tiles/:id", async (req) => ({
-    tile: tiles.update(req.params.id, patchInput.parse(req.body)),
+    tile: tiles.update(
+      req.params.id,
+      patchInput.parse(req.body),
+      actorFor(req.cookies.session),
+    ),
   }));
   app.delete<{ Params: { id: string } }>("/api/tiles/:id", async (req) => {
-    tiles.remove(req.params.id);
+    tiles.remove(req.params.id, actorFor(req.cookies.session));
     return { ok: true };
   });
   app.put<{ Params: { key: string } }>(
@@ -361,6 +373,7 @@ export async function buildApp(options: {
       const { tile, created } = tiles.upsert(
         req.params.key,
         upsertInput.parse(req.body),
+        actorFor(req.cookies.session),
       );
       return reply.code(created ? 201 : 200).send({ tile, created });
     },

@@ -91,16 +91,27 @@ export type VaultNoteDetail = VaultNoteSummary & {
 const vaultVersion = (raw: string) =>
   createHash("sha256").update(raw, "utf8").digest("hex");
 
+type TileContent = {
+  title: string;
+  config: Pick<Tile["config"], "body" | "items">;
+};
+
+const sameTileContent = (left: TileContent, right: TileContent) =>
+  left.title === right.title &&
+  left.config.body === right.config.body &&
+  left.config.items.length === right.config.items.length &&
+  left.config.items.every(
+    (item, index) =>
+      item.text === right.config.items[index].text &&
+      item.done === right.config.items[index].done,
+  );
+
 const matchesLinkedNote = (tile: Tile | FolderChild, note: VaultNoteDetail) =>
   tile.config.vaultVersion === note.version &&
-  tile.title === note.title &&
-  tile.config.body === note.body &&
-  tile.config.items.length === note.items.length &&
-  tile.config.items.every(
-    (item, index) =>
-      item.text === note.items[index].text &&
-      item.done === note.items[index].done,
-  );
+  sameTileContent(tile, {
+    title: note.title,
+    config: { body: note.body, items: note.items },
+  });
 
 const inside = (root: string, target: string) => {
   const rel = relative(root, target);
@@ -774,6 +785,18 @@ export class VaultService {
       [...nextMap.values()].map((t) => t.config.vaultPath).filter(Boolean),
     );
 
+    const linkedPaths = new Set<string>();
+    for (const tile of nextMap.values()) {
+      const path = tile.config.vaultPath;
+      if (!path || path === "*") continue;
+      if (linkedPaths.has(path))
+        throw new TileError(
+          409,
+          `Il file “${path}” è collegato a più tile. Tieni un solo collegamento prima di salvare.`,
+        );
+      linkedPaths.add(path);
+    }
+
     // Validate every existing-file change before the first filesystem side effect.
     // A later conflict must not leave a partially applied desktop save.
     for (const [id, tile] of nextMap.entries()) {
@@ -781,6 +804,14 @@ export class VaultService {
       const relPath = tile.config.vaultPath;
       if (!relPath || relPath === "*") continue;
       const full = this.resolveSafe(relPath);
+      if (prev?.config.vaultPath === relPath && !existsSync(full)) {
+        if (!sameTileContent(prev, tile))
+          throw new TileError(
+            409,
+            `La nota “${relPath}” non esiste più nel vault. Ricollega la tile prima di modificarne il contenuto.`,
+          );
+        continue;
+      }
       if (!existsSync(full)) continue;
       const switchedPath = !prev || prev.config.vaultPath !== relPath;
       const hasCustomContent =
@@ -840,7 +871,18 @@ export class VaultService {
       const prev = prevMap.get(id);
       let relPath = tile.config.vaultPath;
 
-      if (!relPath || relPath === "*") {
+      if (
+        (!relPath || relPath === "*") &&
+        prev?.config.vaultPath &&
+        prev.config.vaultPath !== "*" &&
+        !tile.config.vaultVersion
+      ) {
+        // A client can finish a save with a snapshot captured before the server
+        // assigned the path. Keep the existing linkage instead of copying the file.
+        relPath = prev.config.vaultPath;
+        tile.config.vaultPath = relPath;
+        tile.config.vaultVersion = prev.config.vaultVersion;
+      } else if (!relPath || relPath === "*") {
         relPath = this.allocatePath(tile.title);
         tile.config.vaultPath = relPath;
         this.writeTileFile(tile, relPath);
@@ -848,6 +890,7 @@ export class VaultService {
       }
 
       const full = this.resolveSafe(relPath);
+      if (prev?.config.vaultPath === relPath && !existsSync(full)) continue;
       const switchedPath = !prev || prev.config.vaultPath !== relPath;
 
       if (switchedPath && existsSync(full)) {
@@ -903,9 +946,7 @@ export class VaultService {
         !prev ||
         prev.title !== tile.title ||
         prev.config.body !== tile.config.body ||
-        JSON.stringify(prev.config.items) !==
-          JSON.stringify(tile.config.items) ||
-        !existsSync(this.resolveSafe(relPath));
+        JSON.stringify(prev.config.items) !== JSON.stringify(tile.config.items);
 
       if (contentChanged) {
         this.writeTileFile(

@@ -54,10 +54,12 @@ export function mcpServer(tiles: TileService, vault?: VaultService) {
     "create_tile",
     {
       description:
-        "Crea una tile (origin=agent) nel primo spazio libero, senza spostare le altre. Usa list_tile_types per campi e valori; per collegare una nota del vault di Obsidian passa config.vaultPath.",
+        "Crea una tile (origin=agent) nel primo spazio libero, senza spostare le altre. Usa list_tile_types per campi e valori. Gli agenti non possono creare o collegare note del vault: con un vault attivo usa la sessione del browser per text/data.",
       inputSchema: createInput.shape,
     },
-    run((args: z.infer<typeof createInput>) => ({ tile: tiles.create(args) })),
+    run((args: z.infer<typeof createInput>) => ({
+      tile: tiles.create(args, "agent"),
+    })),
   );
   server.registerTool(
     "update_tile",
@@ -67,7 +69,7 @@ export function mcpServer(tiles: TileService, vault?: VaultService) {
       inputSchema: { id: z.string().uuid(), ...patchInput.shape },
     },
     run(({ id, ...patch }: { id: string } & z.infer<typeof patchInput>) => ({
-      tile: tiles.update(id, patch),
+      tile: tiles.update(id, patch, "agent"),
     })),
   );
   server.registerTool(
@@ -78,7 +80,7 @@ export function mcpServer(tiles: TileService, vault?: VaultService) {
       inputSchema: { key: externalKeySchema, ...upsertInput.shape },
     },
     run(({ key, ...input }: { key: string } & z.infer<typeof upsertInput>) =>
-      tiles.upsert(key, input),
+      tiles.upsert(key, input, "agent"),
     ),
   );
   server.registerTool(
@@ -89,7 +91,7 @@ export function mcpServer(tiles: TileService, vault?: VaultService) {
       inputSchema: { id: z.string().uuid() },
     },
     run(({ id }: { id: string }) => {
-      tiles.remove(id);
+      tiles.remove(id, "agent");
       return { ok: true };
     }),
   );

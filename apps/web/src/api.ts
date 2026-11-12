@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Desktop, Snapshot } from "../../../packages/shared/model";
+import { mergeSavedSnapshot } from "./snapshot";
 
 export class RequestError extends Error {
   constructor(
@@ -102,9 +103,15 @@ export function useDesktop() {
           body: JSON.stringify({ ...value, revision: revision.current }),
         });
         revision.current = result.revision;
+        const next =
+          latest.current === value
+            ? result
+            : mergeSavedSnapshot(latest.current!, value, result);
+        latest.current = next;
+        setDesktop(next);
         setError("");
         setSaveConflict(false);
-        if (latest.current === value) setStatus("Tutto salvato");
+        if (next === result) setStatus("Tutto salvato");
       } catch (e) {
         const conflict = e instanceof RequestError && e.status === 409;
         setSaveConflict(conflict);

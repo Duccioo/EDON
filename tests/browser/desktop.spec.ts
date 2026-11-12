@@ -1339,16 +1339,21 @@ test("tile content adapts to narrow boxes and changing window sizes", async ({
           ),
       )
       .toEqual([]);
-    const folderAction = page.locator(".tile-folder .tile-expand");
-    if (await folderAction.isVisible()) {
-      const folderBounds = await page.locator(".tile-folder").boundingBox();
-      const actionBounds = await folderAction.boundingBox();
-      expect(actionBounds!.y + actionBounds!.height).toBeLessThanOrEqual(
-        folderBounds!.y + folderBounds!.height + 1,
-      );
-    } else {
-      await expect(folderAction).toBeHidden();
-    }
+    const folder = page.locator(".tile-folder");
+    const folderAction = folder.locator(".tile-expand");
+    await expect
+      .poll(async () => {
+        const folderBounds = await folder.boundingBox();
+        if (!folderBounds) return false;
+        if (!(await folderAction.isVisible())) return true;
+        const actionBounds = await folderAction.boundingBox();
+        return Boolean(
+          actionBounds &&
+          actionBounds.y + actionBounds.height <=
+            folderBounds.y + folderBounds.height + 1,
+        );
+      })
+      .toBe(true);
     for (const selector of [".perf-tile", ".ai-limits-tile", ".radio-tile"]) {
       await expect
         .poll(() =>

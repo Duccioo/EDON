@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   stat,
   symlink,
   writeFile,
@@ -11,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "../apps/server/src/app";
-import type { Snapshot } from "../packages/shared/model";
+import { createTile, type Snapshot, type Tile } from "../packages/shared/model";
 
 async function setupVault(archiveFolder = ".trash") {
   const vaultDir = await mkdtemp(join(tmpdir(), "edon-vault-regression-"));
@@ -76,6 +77,259 @@ test("Bearer tokens have read-only vault access, no session telemetry, and full-
     assert.ok(result.notes[0].excerpt.length <= 180);
     assert.equal("body" in result.notes[0], false);
     assert.equal("searchText" in result.notes[0], false);
+  } finally {
+    await app.close();
+  }
+});
+
+test("agent tokens cannot write, relink or trash existing vault notes through tile APIs", async () => {
+  const { app, vaultDir, cookie, authorization } = await setupVault();
+  try {
+    const secret = "# Segreto\n\nNon toccare.\n";
+    await writeFile(join(vaultDir, "Segreto.md"), secret);
+    const detail = (
+      await app.inject({ url: noteUrl("Segreto.md"), headers: { cookie } })
+    ).json();
+
+    const directLink = await app.inject({
+      method: "POST",
+      url: "/api/tiles",
+      headers: { authorization },
+      payload: {
+        type: "text",
+        title: "Tentativo",
+        config: {
+          vaultPath: "Segreto.md",
+          vaultVersion: detail.version,
+          body: "sovrascritto",
+        },
+      },
+    });
+    assert.equal(directLink.statusCode, 403);
+    assert.equal(await readFile(join(vaultDir, "Segreto.md"), "utf8"), secret);
+
+    const newNote = await app.inject({
+      method: "POST",
+      url: "/api/tiles",
+      headers: { authorization },
+      payload: { type: "text", title: "Agente", config: { body: "no" } },
+    });
+    assert.equal(newNote.statusCode, 403);
+    assert.deepEqual(await readdir(vaultDir), ["Segreto.md"]);
+
+    const linkTile = await app.inject({
+      method: "POST",
+      url: "/api/tiles",
+      headers: { authorization },
+      payload: {
+        type: "link",
+        title: "Solo desktop",
+        url: "https://example.com",
+      },
+    });
+    assert.equal(linkTile.statusCode, 201);
+    // Creating an unrelated agent tile must not export the user's existing
+    // desktop notes into the vault as a side effect.
+    assert.deepEqual(await readdir(vaultDir), ["Segreto.md"]);
+
+    const linked = await app.inject({
+      method: "POST",
+      url: "/api/tiles",
+      headers: { cookie },
+      payload: {
+        type: "text",
+        title: detail.title,
+        config: {
+          vaultPath: detail.path,
+          vaultVersion: detail.version,
+          body: detail.body,
+        },
+      },
+    });
+    assert.equal(linked.statusCode, 201, linked.body);
+    const id = linked.json().tile.id as string;
+
+    const agentEdit = await app.inject({
+      method: "PATCH",
+      url: `/api/tiles/${id}`,
+      headers: { authorization },
+      payload: { config: { body: "modificato" } },
+    });
+    assert.equal(agentEdit.statusCode, 403);
+    const agentDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/tiles/${id}`,
+      headers: { authorization },
+    });
+    assert.equal(agentDelete.statusCode, 403);
+    assert.equal(await readFile(join(vaultDir, "Segreto.md"), "utf8"), secret);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a renamed or deleted vault note is never recreated at its old path", async () => {
+  const { app, vaultDir, cookie } = await setupVault();
+  try {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tiles",
+      headers: { cookie },
+      payload: { type: "text", title: "Spesa", config: { body: "Latte" } },
+    });
+    assert.equal(created.statusCode, 201);
+    const tile = created.json().tile as Tile;
+    const relPath = tile.config.vaultPath;
+    const oldFull = join(vaultDir, relPath);
+    assert.equal((await stat(oldFull)).isFile(), true);
+
+    await rename(oldFull, join(vaultDir, "Lista spesa.md"));
+    const snapshot = (
+      await app.inject({ url: "/api/desktop", headers: { cookie } })
+    ).json() as Snapshot;
+
+    const unrelated = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: {
+        ...snapshot,
+        settings: { ...snapshot.settings, name: "Spesa riorganizzata" },
+      },
+    });
+    assert.equal(unrelated.statusCode, 200, unrelated.body);
+    await assert.rejects(stat(oldFull));
+
+    const edited = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: {
+        ...snapshot,
+        settings: { ...snapshot.settings, name: "Spesa riorganizzata" },
+        tiles: snapshot.tiles.map((item) =>
+          item.id === tile.id
+            ? {
+                ...item,
+                config: { ...item.config, body: "Latte e pane" },
+              }
+            : item,
+        ),
+      },
+    });
+    assert.equal(edited.statusCode, 409);
+    await assert.rejects(stat(oldFull));
+    assert.equal(
+      await readFile(join(vaultDir, "Lista spesa.md"), "utf8"),
+      "# Spesa\n\nLatte\n",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("a stale client snapshot reuses the server-assigned vault path instead of copying the note", async () => {
+  const { app, vaultDir, cookie } = await setupVault();
+  try {
+    const snapshot = (
+      await app.inject({ url: "/api/desktop", headers: { cookie } })
+    ).json() as Snapshot;
+    const note = createTile(
+      "text",
+      [],
+      undefined,
+      snapshot.settings.maxTiles,
+      snapshot.settings,
+    );
+    note.title = "Idea";
+    note.config.body = "Una sola copia.";
+
+    const first = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: { ...snapshot, tiles: [note] },
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    const saved = first.json() as Snapshot;
+    const assigned = saved.tiles[0].config.vaultPath;
+    assert.equal(assigned, "Idea.md");
+    assert.equal((await stat(join(vaultDir, "Idea.md"))).isFile(), true);
+
+    const clock = createTile(
+      "clock",
+      [note],
+      { w: 1, h: 1 },
+      snapshot.settings.maxTiles,
+      snapshot.settings,
+    );
+    const second = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: { ...snapshot, revision: saved.revision, tiles: [note, clock] },
+    });
+    assert.equal(second.statusCode, 200, second.body);
+    const after = second.json() as Snapshot;
+    assert.equal(
+      after.tiles.find((tile) => tile.id === note.id)?.config.vaultPath,
+      assigned,
+    );
+    assert.deepEqual(
+      (await readdir(vaultDir)).filter((name) => name.endsWith(".md")),
+      ["Idea.md"],
+    );
+    assert.equal(
+      await readFile(join(vaultDir, "Idea.md"), "utf8"),
+      "# Idea\n\nUna sola copia.\n",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("two tiles cannot share one vault file and a conflict leaves the file unchanged", async () => {
+  const { app, vaultDir, cookie } = await setupVault();
+  try {
+    const raw = "# Condivisa\n\nOriginale\n";
+    await writeFile(join(vaultDir, "Condivisa.md"), raw);
+    const detail = (
+      await app.inject({ url: noteUrl("Condivisa.md"), headers: { cookie } })
+    ).json();
+    const snapshot = (
+      await app.inject({ url: "/api/desktop", headers: { cookie } })
+    ).json() as Snapshot;
+    const first = createTile(
+      "text",
+      [],
+      undefined,
+      snapshot.settings.maxTiles,
+      snapshot.settings,
+    );
+    const second = createTile(
+      "text",
+      [first],
+      undefined,
+      snapshot.settings.maxTiles,
+      snapshot.settings,
+    );
+    for (const [tile, body] of [
+      [first, "Prima"],
+      [second, "Seconda"],
+    ] as const) {
+      tile.title = "Condivisa";
+      tile.config.vaultPath = detail.path;
+      tile.config.vaultVersion = detail.version;
+      tile.config.body = body;
+    }
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/desktop",
+      headers: { cookie },
+      payload: { ...snapshot, tiles: [first, second] },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(await readFile(join(vaultDir, "Condivisa.md"), "utf8"), raw);
   } finally {
     await app.close();
   }
@@ -183,12 +437,12 @@ test("existing lossy Markdown is rejected unchanged while EDON notes support ver
 });
 
 test("desktop revision is checked before vault effects and tile writes and trash reject stale disk versions", async () => {
-  const { app, vaultDir, cookie, authorization } = await setupVault();
+  const { app, vaultDir, cookie } = await setupVault();
   try {
     const created = await app.inject({
       method: "POST",
       url: "/api/tiles",
-      headers: { authorization },
+      headers: { cookie },
       payload: { type: "text", title: "Concurrent", config: { body: "EDON" } },
     });
     assert.equal(created.statusCode, 201);
@@ -250,7 +504,7 @@ test("desktop revision is checked before vault effects and tile writes and trash
 });
 
 test("linking a non-empty note uses its version and a later conflict prevents all disk writes", async () => {
-  const { app, vaultDir, cookie, authorization } = await setupVault();
+  const { app, vaultDir, cookie } = await setupVault();
   try {
     const original = "# Existing\r\n\r\nPinned body\r\n\r\n- [ ] Task\r\n";
     const canonical = "# Existing\n\nPinned body\n\n- [ ] Task\n";
@@ -261,7 +515,7 @@ test("linking a non-empty note uses its version and a later conflict prevents al
     const linked = await app.inject({
       method: "POST",
       url: "/api/tiles",
-      headers: { authorization },
+      headers: { cookie },
       payload: {
         type: detail.kind,
         title: detail.title,
@@ -273,7 +527,7 @@ test("linking a non-empty note uses its version and a later conflict prevents al
         },
       },
     });
-    assert.equal(linked.statusCode, 201);
+    assert.equal(linked.statusCode, 201, linked.body);
     assert.equal(
       await readFile(join(vaultDir, "Existing.md"), "utf8"),
       original,
@@ -283,7 +537,7 @@ test("linking a non-empty note uses its version and a later conflict prevents al
     const second = await app.inject({
       method: "POST",
       url: "/api/tiles",
-      headers: { authorization },
+      headers: { cookie },
       payload: { type: "text", title: "Second", config: { body: "Original" } },
     });
     const snapshot = (

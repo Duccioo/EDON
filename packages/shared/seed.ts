@@ -84,7 +84,7 @@ export function seedDesktop(): Desktop {
         config: config("", "⌘"),
         appearance: { ...presets.glass },
       }),
-      tile("text", "Good ideas\nlive here.", 4, 1, 2, 1, {
+      tile("text", "Good ideas live here.", 4, 1, 2, 1, {
         appearance: {
           ...presets.minimal,
           background: "#d6ef53",
@@ -92,7 +92,7 @@ export function seedDesktop(): Desktop {
         },
         config: config("Annota qualcosa. Lascia sedimentare.\nPoi costruisci."),
       }),
-      tile("text", "Personal\nspace.", 0, 2, 2, 2, {
+      tile("text", "Personal space.", 0, 2, 2, 2, {
         appearance: { ...presets.industrial, font: "editorial" },
         subtitle: "Un piccolo manifesto",
         config: config(

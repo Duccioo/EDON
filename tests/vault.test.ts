@@ -87,11 +87,11 @@ test("Obsidian Vault integration syncs tiles, notes, TODOs, archive and trash tw
     assert.equal(detail.items.length, 2);
     assert.ok(detail.obsidianUrl.startsWith("obsidian://open?vault="));
 
-    // Create a new text tile via Agent/API -> automatically writes a .md file in EDON/
+    // Create a new text tile from the browser session -> automatically writes a .md file in EDON/
     const createdTileRes = await app.inject({
       method: "POST",
       url: "/api/tiles",
-      headers: { authorization: "Bearer vault-token" },
+      headers: { cookie },
       payload: {
         type: "text",
         title: "Idea veloce",
@@ -131,7 +131,7 @@ test("Obsidian Vault integration syncs tiles, notes, TODOs, archive and trash tw
     const pinnedRes = await app.inject({
       method: "POST",
       url: "/api/tiles",
-      headers: { authorization: "Bearer vault-token" },
+      headers: { cookie },
       payload: {
         type: "data",
         title: "Roadmap Q4",

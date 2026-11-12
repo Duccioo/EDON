@@ -60,6 +60,7 @@ export const upsertInput = z.object(tileFields).partial().strict();
 export type CreateInput = z.infer<typeof createInput>;
 export type PatchInput = z.infer<typeof patchInput>;
 export type UpsertInput = z.infer<typeof upsertInput>;
+export type TileActor = "session" | "agent";
 export const layoutInput = z
   .object({
     tiles: z
@@ -78,7 +79,7 @@ export const tileTypeDocs = [
   {
     type: "text",
     description:
-      "Nota di testo. Il contenuto è in config.body (max 10000). Se il vault di Obsidian è attivo, config.vaultPath collega la tile a un file .md del vault; per sovrascrivere una nota esistente passa anche config.vaultVersion restituito da read_vault_note.",
+      "Nota di testo. Il contenuto è in config.body (max 10000). Con un vault Obsidian attivo, il collegamento a config.vaultPath e le scritture sono consentiti solo dalla sessione del browser: i token agente non possono modificare file del vault.",
     fields: [
       "title",
       "subtitle",
@@ -92,7 +93,7 @@ export const tileTypeDocs = [
   {
     type: "data",
     description:
-      "Tile di dati: testo in config.body ed elenco di voci spuntabili in config.items (max 30, ognuna {id,text,done}). Sincronizzata con config.vaultPath nel vault di Obsidian se attivo; per sovrascrivere una nota esistente passa anche config.vaultVersion restituito da read_vault_note.",
+      "Tile di dati: testo in config.body ed elenco di voci spuntabili in config.items (max 30, ognuna {id,text,done}). Con un vault Obsidian attivo, collegamento e scritture richiedono la sessione del browser; i token agente hanno accesso read-only al vault.",
     fields: [
       "title",
       "subtitle",
@@ -302,27 +303,60 @@ export class TileService {
     if (!tile) throw new TileError(404, "Tile non trovata.");
     return tile;
   }
-  create(input: CreateInput): Tile {
+  private assertAgentNoVaultWrite(
+    actor: TileActor,
+    type: Tile["type"],
+    current?: Tile,
+    patch?: Partial<Tile["config"]>,
+    includeNoteType = true,
+  ) {
+    if (actor !== "agent") return;
+    if ((patch?.vaultPath ?? current?.config.vaultPath ?? "") !== "")
+      throw new TileError(
+        403,
+        "Gli agenti non possono collegare file o cartelle del vault.",
+      );
+    if (
+      includeNoteType &&
+      this.vault?.isConfigured() &&
+      (type === "text" || type === "data")
+    )
+      throw new TileError(
+        403,
+        "Con il vault attivo, note e TODO si modificano dalla sessione del browser.",
+      );
+  }
+
+  create(input: CreateInput, actor: TileActor = "session"): Tile {
+    const parsed = createInput.parse(input);
+    this.assertAgentNoVaultWrite(actor, parsed.type, undefined, parsed.config);
     return this.store.mutate((desktop) => {
       const previous = structuredClone(desktop);
       purge(desktop);
-      const created = this.insert(desktop, createInput.parse(input));
-      this.vault?.syncToDisk(previous, desktop);
+      const created = this.insert(desktop, parsed);
+      if (actor === "session") this.vault?.syncToDisk(previous, desktop);
       return desktop.tiles.find((t) => t.id === created.id) ?? created;
     }).result;
   }
-  update(id: string, input: PatchInput): Tile {
-    patchInput.parse(input);
+  update(id: string, input: PatchInput, actor: TileActor = "session"): Tile {
+    const parsed = patchInput.parse(input);
     return this.store.mutate((desktop) => {
       const previous = structuredClone(desktop);
       purge(desktop);
-      const updated = this.change(desktop, id, input);
-      this.vault?.syncToDisk(previous, desktop);
+      const current = desktop.tiles.find((tile) => tile.id === id);
+      if (!current) throw new TileError(404, "Tile non trovata.");
+      this.assertAgentNoVaultWrite(actor, current.type, current, parsed.config);
+      const updated = this.change(desktop, id, parsed);
+      if (actor === "session") this.vault?.syncToDisk(previous, desktop);
       return desktop.tiles.find((t) => t.id === updated.id) ?? updated;
     }).result;
   }
   /** Idempotent: updates the tile carrying this key, or creates it. */
-  upsert(key: string, input: UpsertInput): { tile: Tile; created: boolean } {
+  upsert(
+    key: string,
+    input: UpsertInput,
+    actor: TileActor = "session",
+  ): { tile: Tile; created: boolean } {
     externalKeySchema.parse(key);
     upsertInput.parse(input);
     return this.store.mutate((desktop) => {
@@ -330,6 +364,12 @@ export class TileService {
       purge(desktop);
       const existing = desktop.tiles.find((t) => t.externalKey === key);
       if (existing) {
+        this.assertAgentNoVaultWrite(
+          actor,
+          existing.type,
+          existing,
+          input.config,
+        );
         if (input.type && input.type !== existing.type)
           throw new TileError(
             409,
@@ -337,7 +377,7 @@ export class TileService {
           );
         const { type: _type, ...rest } = input;
         const updated = this.change(desktop, existing.id, rest);
-        this.vault?.syncToDisk(previous, desktop);
+        if (actor === "session") this.vault?.syncToDisk(previous, desktop);
         return {
           tile: desktop.tiles.find((t) => t.id === updated.id) ?? updated,
           created: false,
@@ -345,31 +385,33 @@ export class TileService {
       }
       if (!input.type)
         throw new TileError(400, "Per creare la tile serve il campo type.");
+      this.assertAgentNoVaultWrite(actor, input.type, undefined, input.config);
       const created = this.insert(desktop, {
         ...input,
         type: input.type,
         externalKey: key,
       });
-      this.vault?.syncToDisk(previous, desktop);
+      if (actor === "session") this.vault?.syncToDisk(previous, desktop);
       return {
         tile: desktop.tiles.find((t) => t.id === created.id) ?? created,
         created: true,
       };
     }).result;
   }
-  remove(id: string): void {
+  remove(id: string, actor: TileActor = "session"): void {
     this.store.mutate((desktop) => {
       const previous = structuredClone(desktop);
       purge(desktop);
       const tile = desktop.tiles.find((t) => t.id === id);
       if (!tile) throw new TileError(404, "Tile non trovata.");
+      this.assertAgentNoVaultWrite(actor, tile.type, tile, undefined, false);
       if (tile.origin !== "agent")
         throw new TileError(
           403,
           "Gli agenti possono eliminare solo le tile create da un agente.",
         );
       desktop.tiles = desktop.tiles.filter((t) => t.id !== id);
-      this.vault?.syncToDisk(previous, desktop);
+      if (actor === "session") this.vault?.syncToDisk(previous, desktop);
     });
   }
   layout() {
